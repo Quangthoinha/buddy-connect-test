@@ -484,50 +484,7 @@ export default function App() {
 
       // 2. Fetch workspace members
       const workspaceMembers = await listMembers(activeWs);
-
-      // Generate 200 mock colleagues for scale testing in local development
-      const mockMembers = [];
-      const mockProfs = {};
-      const mockTags = {};
-      
-      const firstNames = ['Nguyễn', 'Trần', 'Lê', 'Phạm', 'Hoàng', 'Huỳnh', 'Phan', 'Vũ', 'Võ', 'Đặng', 'Bùi', 'Đỗ', 'Hồ', 'Ngô'];
-      const middleNames = ['Văn', 'Thị', 'Đăng', 'Minh', 'Ngọc', 'Hữu', 'Phương', 'Khánh', 'Anh', 'Hoàng', 'Thế', 'Quốc'];
-      const lastNames = ['Hùng', 'Dung', 'Tuấn', 'Hà', 'Nam', 'Tú', 'Linh', 'Lan', 'Sơn', 'Hải', 'Thành', 'Trang', 'Tuyết', 'Nhung', 'Phong', 'Lộc', 'Khang', 'Bảo', 'Vy', 'Yến'];
-      const depts = ['Kỹ thuật (R&D)', 'Kinh doanh (Sales)', 'Nhân sự (HR)', 'Marketing', 'Thiết kế (UI/UX)', 'Chăm sóc khách hàng (CS)', 'Tài chính (Finance)'];
-      const facs = ['Cơ sở Hà Nội - Keangnam', 'Cơ sở TP.HCM - Landmark 81', 'Cơ sở Đà Nẵng - Hải Châu'];
-      const times = ['Giờ ăn trưa', 'Chiều sau giờ làm', 'Cuối tuần', 'Tối ngày thường'];
-
-      for (let i = 0; i < 200; i++) {
-        const mockId = `mock-user-uuid-${1000 + i}`;
-        const name = `${firstNames[Math.floor(Math.random() * firstNames.length)]} ${middleNames[Math.floor(Math.random() * middleNames.length)]} ${lastNames[Math.floor(Math.random() * lastNames.length)]}`;
-        
-        mockMembers.push({
-          user_id: mockId,
-          role: 'member',
-          full_name: name,
-          avatar_url: null,
-          work_phone: `0987654${String(100 + i).slice(-3)}`
-        });
-
-        mockProfs[mockId] = {
-          user_id: mockId,
-          workspace_id: activeWs,
-          department: depts[Math.floor(Math.random() * depts.length)],
-          facility: facs[Math.floor(Math.random() * facs.length)],
-          available_times: [times[Math.floor(Math.random() * times.length)], times[Math.floor(Math.random() * times.length)]].filter((v, idx, self) => self.indexOf(v) === idx)
-        };
-
-        // Each mock colleague gets 1 to 3 random tags
-        const numTags = Math.floor(Math.random() * 3) + 1; // 1 to 3 tags
-        const randomTags = [];
-        const shuffledFlatTags = [...FLAT_TAGS].sort(() => 0.5 - Math.random());
-        for (let t = 0; t < numTags; t++) {
-          randomTags.push(shuffledFlatTags[t].code);
-        }
-        mockTags[mockId] = randomTags;
-      }
-
-      setMembers([...workspaceMembers.filter(m => m.user_id !== ctx.userId), ...mockMembers]);
+      setMembers(workspaceMembers.filter(m => m.user_id !== ctx.userId));
 
       // 3. Fetch all profiles & tags in workspace to build match registry
       const { data: allProfs } = await db
@@ -538,7 +495,7 @@ export default function App() {
       if (allProfs) {
         allProfs.forEach(p => { profMap[p.user_id] = p; });
       }
-      setAllProfiles({ ...profMap, ...mockProfs });
+      setAllProfiles(profMap);
 
       const { data: allTags } = await db
         .from('user_tags')
@@ -551,7 +508,7 @@ export default function App() {
           tagsMap[t.user_id].push(t.child_code);
         });
       }
-      setAllUserTags({ ...tagsMap, ...mockTags });
+      setAllUserTags(tagsMap);
 
       // 4. Fetch interaction history
       const { data: history } = await db
@@ -581,52 +538,7 @@ export default function App() {
       .eq('workspace_id', activeWs)
       .order('scheduled_at', { ascending: true });
 
-    // Generate 3 static mock rooms hosted by our mock colleagues
-    const mockRooms = [
-      {
-        id: 'mock-room-inv-100',
-        workspace_id: activeWs,
-        host_id: 'mock-user-uuid-1001',
-        child_code: 'badminton',
-        location: 'Sân cầu lông Kỳ Hòa (Sân số 3)',
-        scheduled_at: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(),
-        max_participants: 2,
-        status: 'open',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      },
-      {
-        id: 'mock-room-inv-101',
-        workspace_id: activeWs,
-        host_id: 'mock-user-uuid-1002',
-        child_code: 'cafe',
-        location: 'Quán Highlands Coffee đối diện công ty',
-        scheduled_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-        max_participants: 2,
-        status: 'open',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      },
-      {
-        id: 'mock-room-inv-102',
-        workspace_id: activeWs,
-        host_id: 'mock-user-uuid-1003',
-        child_code: 'movie',
-        location: 'CGV Pearl Plaza (Rạp số 2)',
-        scheduled_at: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
-        max_participants: 2,
-        status: 'open',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      }
-    ];
-
-    setRooms(prev => {
-      const dbRms = rms || [];
-      const currentMockRms = prev.filter(r => r.id.startsWith('mock-'));
-      const finalMocks = currentMockRms.length > 0 ? currentMockRms : mockRooms;
-      return [...finalMocks, ...dbRms];
-    });
+    setRooms(rms || []);
   }
 
   async function loadInvitationsData() {
@@ -638,42 +550,7 @@ export default function App() {
       .select('*')
       .eq('workspace_id', activeWs);
 
-    const mockInvs = [
-      {
-        id: 'mock-inv-100',
-        workspace_id: activeWs,
-        room_id: 'mock-room-inv-100',
-        receiver_id: ctx.userId,
-        status: 'pending',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      },
-      {
-        id: 'mock-inv-101',
-        workspace_id: activeWs,
-        room_id: 'mock-room-inv-101',
-        receiver_id: ctx.userId,
-        status: 'pending',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      },
-      {
-        id: 'mock-inv-102',
-        workspace_id: activeWs,
-        room_id: 'mock-room-inv-102',
-        receiver_id: ctx.userId,
-        status: 'pending',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      }
-    ];
-
-    setInvitations(prev => {
-      const dbInvs = invs || [];
-      const currentMockInvs = prev.filter(i => i.id.startsWith('mock-'));
-      const finalMocks = currentMockInvs.length > 0 ? currentMockInvs : mockInvs;
-      return [...finalMocks, ...dbInvs];
-    });
+    setInvitations(invs || []);
   }
 
   // 8.1 Expiry Daemon: Client-side lazy sweep
@@ -1310,21 +1187,6 @@ export default function App() {
       bridge.haptic('light');
       const activeWs = scope.workspaceId;
       
-      // INTERCEPT MOCK INVITATION
-      if (inv.id.startsWith('mock-')) {
-        // Set invitation to accepted
-        setInvitations(prev => prev.map(i => i.id === inv.id ? { ...i, status: 'accepted' } : i));
-        
-        // Find and update the mock room status to matched
-        setRooms(prev => prev.map(r => r.id === inv.room_id ? { 
-          ...r, 
-          status: 'matched', 
-          chat_group_id: 'mock-chat-group-123' 
-        } : r));
-        
-        dialog.success('Đã ghép cặp thành công!', 'Chúc mừng! Bạn đã chấp nhận lời mời và ghép cặp thành công. Nhóm chat đã sẵn sàng!');
-        return;
-      }
 
       const room = rooms.find(r => r.id === inv.room_id);
       if (!room) return;
@@ -1537,14 +1399,10 @@ export default function App() {
     const newChatGroupId = JSON.stringify(updatedMessages);
 
     try {
-      if (room.id.startsWith('mock-')) {
-        setRooms(prev => prev.map(r => r.id === room.id ? { ...r, chat_group_id: newChatGroupId } : r));
-      } else {
-        await db
-          .from('rooms')
-          .update({ chat_group_id: newChatGroupId, updated_at: new Date().toISOString() })
-          .eq('id', room.id);
-      }
+      await db
+        .from('rooms')
+        .update({ chat_group_id: newChatGroupId, updated_at: new Date().toISOString() })
+        .eq('id', room.id);
     } catch (e) {
       console.error('Failed to send chat message:', e);
     }
@@ -1605,12 +1463,6 @@ export default function App() {
     try {
       bridge.haptic('light');
       
-      // INTERCEPT MOCK INVITATION
-      if (inv.id.startsWith('mock-')) {
-        setInvitations(prev => prev.map(i => i.id === inv.id ? { ...i, status: 'declined' } : i));
-        dialog.success('Đã từ chối', 'Bạn đã từ chối lời mời này thành công.');
-        return;
-      }
 
       await db
         .from('invitations')
