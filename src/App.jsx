@@ -2130,7 +2130,26 @@ export default function App() {
                     return (
                       <>
                         {paginatedCandidates.map(({ member, profile, tags, exactMatches, priority, isFallback, fallbackParentLabel, matchScore, hasInteracted }) => (
-                          <section key={member.user_id} className="buddy-card-compact">
+                          <section 
+                            key={member.user_id} 
+                            className="buddy-card-compact"
+                            style={{ cursor: 'pointer' }}
+                            onClick={() => {
+                              bridge.haptic('light');
+                              let targetTag = null;
+                              if (exactMatches.length > 0) {
+                                targetTag = exactMatches[0];
+                              } else {
+                                const memberTags = tags.map(code => FLAT_TAGS.find(t => t.code === code)).filter(Boolean);
+                                const myParentCodes = (myTags || []).map(code => FLAT_TAGS.find(t => t.code === code)?.parent_code).filter(Boolean);
+                                targetTag = memberTags.find(tagObj => myParentCodes.includes(tagObj.parent_code)) || memberTags[0] || FLAT_TAGS[0];
+                              }
+                              if (targetTag) {
+                                setQuickInviteData({ member, tagCode: targetTag.code, tagName: targetTag.name });
+                                setQuickInviteTime(quickTimeOptions[0]?.value || '');
+                              }
+                            }}
+                          >
                             <div className="buddy-card-main">
                               <div className="buddy-avatar-compact">
                                 <span>{member.full_name?.charAt(0)}</span>
@@ -2252,7 +2271,7 @@ export default function App() {
                   <form onSubmit={handleCreateRoomSubmit} className="form-slide-down" style={{ marginTop: 20, borderTop: '1px solid var(--hairline)', paddingTop: 16 }}>
                     <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
                       <div style={{ flex: 1 }}>
-                        <label className="mushy-label">Danh mục chính</label>
+                        <label className="mushy-label" style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginLeft: '6px', marginBottom: '5px' }}>Danh mục chính</label>
                         <Select
                           value={selectedParentCode}
                           onChange={handleParentChange}
@@ -2260,7 +2279,7 @@ export default function App() {
                         />
                       </div>
                       <div style={{ flex: 1 }}>
-                        <label className="mushy-label">Bộ môn / Sở thích cụ thể</label>
+                        <label className="mushy-label" style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginLeft: '6px', marginBottom: '5px' }}>Bộ môn / Sở thích cụ thể</label>
                         <Select
                           value={newRoom.child_code}
                           onChange={(val) => setNewRoom(prev => ({ ...prev, child_code: val }))}
@@ -2270,43 +2289,44 @@ export default function App() {
                     </div>
 
                     <div style={{ marginBottom: 12 }}>
-                      <label className="mushy-label">Vị trí / Địa điểm hẹn</label>
+                      <label className="mushy-label" style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginLeft: '6px', marginBottom: '5px' }}>Vị trí / Địa điểm hẹn</label>
                       <input
                         type="text"
                         className="mushy-input"
                         placeholder="Vd: Sân cầu lông Thượng Đình, 345 Nguyễn Trãi..."
                         value={newRoom.location}
                         onChange={(e) => setNewRoom(prev => ({ ...prev, location: e.target.value }))}
+                        style={{ borderRadius: '14px', border: '1.5px solid var(--hairline)', padding: '10px 14px', fontSize: '13.5px', minHeight: '44px', width: '100%', outline: 'none' }}
                         required
                       />
                     </div>
 
                     <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
                       <div style={{ flex: 1 }}>
-                        <label className="mushy-label">Thời gian hẹn tổ chức</label>
+                        <label className="mushy-label" style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginLeft: '6px', marginBottom: '5px' }}>Thời gian hẹn tổ chức</label>
                         <input
                           type="datetime-local"
                           className="mushy-input"
-                          style={{ padding: '10px 14px', fontSize: '13.5px', minHeight: '44px' }}
+                          style={{ borderRadius: '14px', border: '1.5px solid var(--hairline)', padding: '10px 14px', fontSize: '13.5px', minHeight: '44px', width: '100%', outline: 'none' }}
                           value={newRoom.scheduled_at}
                           onChange={(e) => setNewRoom(prev => ({ ...prev, scheduled_at: e.target.value }))}
                           required
                         />
-                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 6 }}>
-                          <button type="button" onClick={() => setQuickTime('today_19')} style={{ fontSize: 9.5, padding: '3px 6px', background: 'rgba(15,15,18,0.03)', border: '1px solid var(--hairline)', borderRadius: 6, color: 'var(--muted)', cursor: 'pointer' }}>Tối nay 19h</button>
-                          <button type="button" onClick={() => setQuickTime('today_20')} style={{ fontSize: 9.5, padding: '3px 6px', background: 'rgba(15,15,18,0.03)', border: '1px solid var(--hairline)', borderRadius: 6, color: 'var(--muted)', cursor: 'pointer' }}>Tối nay 20h</button>
-                          <button type="button" onClick={() => setQuickTime('tomorrow_8')} style={{ fontSize: 9.5, padding: '3px 6px', background: 'rgba(15,15,18,0.03)', border: '1px solid var(--hairline)', borderRadius: 6, color: 'var(--muted)', cursor: 'pointer' }}>Sáng mai 8h</button>
-                          <button type="button" onClick={() => setQuickTime('tomorrow_17')} style={{ fontSize: 9.5, padding: '3px 6px', background: 'rgba(15,15,18,0.03)', border: '1px solid var(--hairline)', borderRadius: 6, color: 'var(--muted)', cursor: 'pointer' }}>Chiều mai 17h</button>
-                          <button type="button" onClick={() => setQuickTime('weekend_9')} style={{ fontSize: 9.5, padding: '3px 6px', background: 'rgba(15,15,18,0.03)', border: '1px solid var(--hairline)', borderRadius: 6, color: 'var(--muted)', cursor: 'pointer' }}>T7/CN 9h sáng</button>
+                        <div style={{ display: 'flex', gap: 6, overflowX: 'auto', padding: '4px 2px', marginTop: 6, scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                          <button type="button" onClick={() => setQuickTime('today_19')} style={{ flexShrink: 0, fontSize: 11, padding: '6px 12px', background: 'rgba(15,15,18,0.03)', border: '1px solid var(--hairline)', borderRadius: 10, color: 'var(--muted)', cursor: 'pointer', transition: 'all 0.2s' }}>Tối nay 19h</button>
+                          <button type="button" onClick={() => setQuickTime('today_20')} style={{ flexShrink: 0, fontSize: 11, padding: '6px 12px', background: 'rgba(15,15,18,0.03)', border: '1px solid var(--hairline)', borderRadius: 10, color: 'var(--muted)', cursor: 'pointer', transition: 'all 0.2s' }}>Tối nay 20h</button>
+                          <button type="button" onClick={() => setQuickTime('tomorrow_8')} style={{ flexShrink: 0, fontSize: 11, padding: '6px 12px', background: 'rgba(15,15,18,0.03)', border: '1px solid var(--hairline)', borderRadius: 10, color: 'var(--muted)', cursor: 'pointer', transition: 'all 0.2s' }}>Sáng mai 8h</button>
+                          <button type="button" onClick={() => setQuickTime('tomorrow_17')} style={{ flexShrink: 0, fontSize: 11, padding: '6px 12px', background: 'rgba(15,15,18,0.03)', border: '1px solid var(--hairline)', borderRadius: 10, color: 'var(--muted)', cursor: 'pointer', transition: 'all 0.2s' }}>Chiều mai 17h</button>
+                          <button type="button" onClick={() => setQuickTime('weekend_9')} style={{ flexShrink: 0, fontSize: 11, padding: '6px 12px', background: 'rgba(15,15,18,0.03)', border: '1px solid var(--hairline)', borderRadius: 10, color: 'var(--muted)', cursor: 'pointer', transition: 'all 0.2s' }}>T7/CN 9h sáng</button>
                         </div>
                       </div>
                       <div style={{ flex: 1 }}>
-                        <label className="mushy-label">Sĩ số tối đa (cả Host)</label>
+                        <label className="mushy-label" style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginLeft: '6px', marginBottom: '5px' }}>Sĩ số tối đa (cả Host)</label>
                         <input
                           type="number"
                           className="mushy-input"
                           min="2"
-                          style={{ padding: '10px 14px', fontSize: '13.5px', minHeight: '44px' }}
+                          style={{ borderRadius: '14px', border: '1.5px solid var(--hairline)', padding: '10px 14px', fontSize: '13.5px', minHeight: '44px', width: '100%', outline: 'none' }}
                           value={newRoom.max_participants}
                           onChange={(e) => {
                             const val = e.target.value;
@@ -2319,60 +2339,58 @@ export default function App() {
 
                     {/* Guest picker to enforce co-creation (PRD Section 4) */}
                     <div style={{ marginBottom: 16 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                        <label className="mushy-label" style={{ color: 'var(--ink)', margin: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span style={{ color: 'var(--brand)' }}>⚠️</span> Gửi lời mời đầu tiên (Chọn ít nhất 1 người)
-                        </label>
-                        {members.length > 0 && (
-                          <div style={{ display: 'flex', gap: 6 }}>
-                            <button
-                              type="button"
-                              className="mushy-btn"
-                              disabled={matchingTagMembers.length === 0}
-                              onClick={() => handleSelectRandomGuests('same_tag', createRoomAllowedLimit)}
-                              style={{
-                                minHeight: 26,
-                                height: 26,
-                                fontSize: 10.5,
-                                padding: '2px 10px',
-                                background: matchingTagMembers.length === 0 ? 'rgba(15,15,18,0.02)' : 'rgba(230, 57, 70, 0.07)',
-                                borderColor: matchingTagMembers.length === 0 ? 'var(--hairline)' : 'rgba(230, 57, 70, 0.25)',
-                                color: matchingTagMembers.length === 0 ? 'var(--muted)' : 'var(--brand)',
-                                fontWeight: 700,
-                                borderRadius: 6,
-                                opacity: matchingTagMembers.length === 0 ? 0.6 : 1,
-                                cursor: matchingTagMembers.length === 0 ? 'not-allowed' : 'pointer'
-                              }}
-                            >
-                              🎲 Trùng tag ({matchingTagMembers.length})
-                            </button>
-                            <button
-                              type="button"
-                              className="mushy-btn"
-                              onClick={() => handleSelectRandomGuests('any', Math.min(3, createRoomAllowedLimit))}
-                              style={{
-                                minHeight: 26,
-                                height: 26,
-                                fontSize: 10.5,
-                                padding: '2px 10px',
-                                background: 'rgba(6, 182, 212, 0.07)',
-                                borderColor: 'rgba(6, 182, 212, 0.25)',
-                                color: '#06B6D4',
-                                fontWeight: 700,
-                                borderRadius: 6,
-                                cursor: 'pointer'
-                              }}
-                            >
-                              🎲 Ghép bạn mới
-                            </button>
-                          </div>
-                        )}
-                      </div>
+                      <label className="mushy-label" style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 6, marginLeft: '6px', marginBottom: 10 }}>
+                        <span style={{ color: 'var(--brand)' }}>⚠️</span> Gửi lời mời đầu tiên (Chọn ít nhất 1 người)
+                      </label>
+                      {members.length > 0 && (
+                        <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                          <button
+                            type="button"
+                            className="mushy-btn"
+                            disabled={matchingTagMembers.length === 0}
+                            onClick={() => handleSelectRandomGuests('same_tag', createRoomAllowedLimit)}
+                            style={{
+                              flex: 1,
+                              minHeight: 34,
+                              fontSize: 11.5,
+                              padding: '4px 10px',
+                              background: matchingTagMembers.length === 0 ? 'rgba(15,15,18,0.02)' : 'rgba(230, 57, 70, 0.07)',
+                              borderColor: matchingTagMembers.length === 0 ? 'var(--hairline)' : 'rgba(230, 57, 70, 0.25)',
+                              color: matchingTagMembers.length === 0 ? 'var(--muted)' : 'var(--brand)',
+                              fontWeight: 700,
+                              borderRadius: 10,
+                              opacity: matchingTagMembers.length === 0 ? 0.6 : 1,
+                              cursor: matchingTagMembers.length === 0 ? 'not-allowed' : 'pointer'
+                            }}
+                          >
+                            🎲 Trùng tag ({matchingTagMembers.length})
+                          </button>
+                          <button
+                            type="button"
+                            className="mushy-btn"
+                            onClick={() => handleSelectRandomGuests('any', Math.min(3, createRoomAllowedLimit))}
+                            style={{
+                              flex: 1,
+                              minHeight: 34,
+                              fontSize: 11.5,
+                              padding: '4px 10px',
+                              background: 'rgba(6, 182, 212, 0.07)',
+                              borderColor: 'rgba(6, 182, 212, 0.25)',
+                              color: '#06B6D4',
+                              fontWeight: 700,
+                              borderRadius: 10,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            🎲 Ghép bạn mới
+                          </button>
+                        </div>
+                      )}
 
                       {/* Horizontal Scrolling Avatar Chips for matching-tag members */}
                       {matchingTagMembers.length > 0 && (
                         <div style={{ marginBottom: 14 }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, paddingLeft: 6 }}>
                             <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)' }}>
                               🔥 Gợi ý trùng sở thích ({matchingTagMembers.length}):
                             </span>
@@ -2437,15 +2455,15 @@ export default function App() {
                                       width: 48,
                                       height: 48,
                                       borderRadius: '50%',
-                                      background: isSelected ? 'linear-gradient(135deg, var(--brand) 0%, var(--pink) 100%)' : 'var(--brand-soft)',
-                                      border: isSelected ? '2px solid #fff' : '1.5px solid rgba(230, 57, 70, 0.15)',
-                                      boxShadow: isSelected ? '0 0 10px rgba(230, 57, 70, 0.4)' : 'none',
+                                      background: isSelected ? 'linear-gradient(135deg, var(--brand) 0%, var(--pink) 100%)' : getAvatarGradient(m.full_name?.charAt(0)),
+                                      border: isSelected ? '2.5px solid var(--brand)' : '1.5px solid rgba(255, 255, 255, 0.4)',
+                                      boxShadow: isSelected ? '0 0 10px rgba(230, 57, 70, 0.35)' : '0 4px 8px rgba(15, 15, 18, 0.04)',
                                       display: 'flex',
                                       alignItems: 'center',
                                       justifyContent: 'center',
                                       fontSize: 16,
                                       fontWeight: 700,
-                                      color: isSelected ? '#fff' : 'var(--brand)',
+                                      color: '#fff',
                                       transition: 'all 200ms ease',
                                       position: 'relative'
                                     }}
@@ -2478,7 +2496,7 @@ export default function App() {
                                   {/* Name */}
                                   <span
                                     style={{
-                                      fontSize: 11,
+                                      fontSize: 10.5,
                                       fontWeight: isSelected ? 700 : 500,
                                       color: isSelected ? 'var(--brand)' : 'var(--ink)',
                                       textAlign: 'center',
@@ -2621,8 +2639,17 @@ export default function App() {
                           )}
                         </div>
                       ) : (
-                        <div style={{ textAlign: 'center', padding: '12px 6px', color: 'var(--muted)', fontSize: 12 }}>
-                          💡 Nhập tên vào ô tìm kiếm trên để tìm & mời thêm đồng nghiệp khác ngoài sở thích.
+                        <div style={{ 
+                          textAlign: 'center', 
+                          padding: '12px 14px', 
+                          color: 'var(--muted)', 
+                          fontSize: '11.5px',
+                          background: 'rgba(15,15,18,0.02)',
+                          borderRadius: 12,
+                          border: '1px dashed var(--hairline)',
+                          marginTop: 4
+                        }}>
+                          💡 Gõ tên vào ô tìm kiếm trên để tìm & mời thêm đồng nghiệp khác ngoài sở thích.
                         </div>
                       )}
 
