@@ -2280,7 +2280,7 @@ export default function App() {
                   <form onSubmit={handleCreateRoomSubmit} className="form-slide-down" style={{ marginTop: 20, borderTop: '1px solid var(--hairline)', paddingTop: 16 }}>
                     <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
                       <div style={{ flex: 1 }}>
-                        <label className="mushy-label" style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginLeft: '6px', marginBottom: '5px' }}>Danh mục chính</label>
+                        <label className="mushy-label" style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginLeft: '6px', marginBottom: '5px', minHeight: '28px', display: 'flex', alignItems: 'flex-end', paddingBottom: '2px' }}>Danh mục chính</label>
                         <Select
                           value={selectedParentCode}
                           onChange={handleParentChange}
@@ -2288,7 +2288,7 @@ export default function App() {
                         />
                       </div>
                       <div style={{ flex: 1 }}>
-                        <label className="mushy-label" style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginLeft: '6px', marginBottom: '5px' }}>Bộ môn / Sở thích cụ thể</label>
+                        <label className="mushy-label" style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginLeft: '6px', marginBottom: '5px', minHeight: '28px', display: 'flex', alignItems: 'flex-end', paddingBottom: '2px' }}>Bộ môn / Sở thích cụ thể</label>
                         <Select
                           value={newRoom.child_code}
                           onChange={(val) => setNewRoom(prev => ({ ...prev, child_code: val }))}
@@ -2310,40 +2310,39 @@ export default function App() {
                       />
                     </div>
 
-                    <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
-                      <div style={{ flex: 1 }}>
-                        <label className="mushy-label" style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginLeft: '6px', marginBottom: '5px' }}>Thời gian hẹn tổ chức</label>
-                        <input
-                          type="datetime-local"
-                          className="mushy-input"
-                          style={{ borderRadius: '14px', border: '1.5px solid var(--hairline)', padding: '10px 14px', fontSize: '13.5px', minHeight: '44px', width: '100%', outline: 'none' }}
-                          value={newRoom.scheduled_at}
-                          onChange={(e) => setNewRoom(prev => ({ ...prev, scheduled_at: e.target.value }))}
-                          required
-                        />
-                        <div style={{ display: 'flex', gap: 6, overflowX: 'auto', padding: '4px 2px', marginTop: 6, scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                          <button type="button" onClick={() => setQuickTime('today_19')} style={{ flexShrink: 0, fontSize: 11, padding: '6px 12px', background: 'rgba(15,15,18,0.03)', border: '1px solid var(--hairline)', borderRadius: 10, color: 'var(--muted)', cursor: 'pointer', transition: 'all 0.2s' }}>Tối nay 19h</button>
-                          <button type="button" onClick={() => setQuickTime('today_20')} style={{ flexShrink: 0, fontSize: 11, padding: '6px 12px', background: 'rgba(15,15,18,0.03)', border: '1px solid var(--hairline)', borderRadius: 10, color: 'var(--muted)', cursor: 'pointer', transition: 'all 0.2s' }}>Tối nay 20h</button>
-                          <button type="button" onClick={() => setQuickTime('tomorrow_8')} style={{ flexShrink: 0, fontSize: 11, padding: '6px 12px', background: 'rgba(15,15,18,0.03)', border: '1px solid var(--hairline)', borderRadius: 10, color: 'var(--muted)', cursor: 'pointer', transition: 'all 0.2s' }}>Sáng mai 8h</button>
-                          <button type="button" onClick={() => setQuickTime('tomorrow_17')} style={{ flexShrink: 0, fontSize: 11, padding: '6px 12px', background: 'rgba(15,15,18,0.03)', border: '1px solid var(--hairline)', borderRadius: 10, color: 'var(--muted)', cursor: 'pointer', transition: 'all 0.2s' }}>Chiều mai 17h</button>
-                          <button type="button" onClick={() => setQuickTime('weekend_9')} style={{ flexShrink: 0, fontSize: 11, padding: '6px 12px', background: 'rgba(15,15,18,0.03)', border: '1px solid var(--hairline)', borderRadius: 10, color: 'var(--muted)', cursor: 'pointer', transition: 'all 0.2s' }}>T7/CN 9h sáng</button>
-                        </div>
+                    <div style={{ marginBottom: 12 }}>
+                      <label className="mushy-label" style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginLeft: '6px', marginBottom: '5px' }}>Thời gian hẹn tổ chức</label>
+                      <input
+                        type="datetime-local"
+                        className="mushy-input"
+                        style={{ borderRadius: '14px', border: '1.5px solid var(--hairline)', padding: '10px 14px', fontSize: '13.5px', minHeight: '44px', width: '100%', outline: 'none' }}
+                        value={newRoom.scheduled_at}
+                        onChange={(e) => setNewRoom(prev => ({ ...prev, scheduled_at: e.target.value }))}
+                        required
+                      />
+                      <div style={{ display: 'flex', gap: 6, overflowX: 'auto', padding: '4px 2px', marginTop: 6, scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                        <button type="button" onClick={() => setQuickTime('today_19')} style={{ flexShrink: 0, fontSize: 11, padding: '6px 12px', background: 'rgba(15,15,18,0.03)', border: '1px solid var(--hairline)', borderRadius: 10, color: 'var(--muted)', cursor: 'pointer', transition: 'all 0.2s' }}>Tối nay 19h</button>
+                        <button type="button" onClick={() => setQuickTime('today_20')} style={{ flexShrink: 0, fontSize: 11, padding: '6px 12px', background: 'rgba(15,15,18,0.03)', border: '1px solid var(--hairline)', borderRadius: 10, color: 'var(--muted)', cursor: 'pointer', transition: 'all 0.2s' }}>Tối nay 20h</button>
+                        <button type="button" onClick={() => setQuickTime('tomorrow_8')} style={{ flexShrink: 0, fontSize: 11, padding: '6px 12px', background: 'rgba(15,15,18,0.03)', border: '1px solid var(--hairline)', borderRadius: 10, color: 'var(--muted)', cursor: 'pointer', transition: 'all 0.2s' }}>Sáng mai 8h</button>
+                        <button type="button" onClick={() => setQuickTime('tomorrow_17')} style={{ flexShrink: 0, fontSize: 11, padding: '6px 12px', background: 'rgba(15,15,18,0.03)', border: '1px solid var(--hairline)', borderRadius: 10, color: 'var(--muted)', cursor: 'pointer', transition: 'all 0.2s' }}>Chiều mai 17h</button>
+                        <button type="button" onClick={() => setQuickTime('weekend_9')} style={{ flexShrink: 0, fontSize: 11, padding: '6px 12px', background: 'rgba(15,15,18,0.03)', border: '1px solid var(--hairline)', borderRadius: 10, color: 'var(--muted)', cursor: 'pointer', transition: 'all 0.2s' }}>T7/CN 9h sáng</button>
                       </div>
-                      <div style={{ flex: 1 }}>
-                        <label className="mushy-label" style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginLeft: '6px', marginBottom: '5px' }}>Sĩ số tối đa (cả Host)</label>
-                        <input
-                          type="number"
-                          className="mushy-input"
-                          min="2"
-                          style={{ borderRadius: '14px', border: '1.5px solid var(--hairline)', padding: '10px 14px', fontSize: '13.5px', minHeight: '44px', width: '100%', outline: 'none' }}
-                          value={newRoom.max_participants}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setNewRoom(prev => ({ ...prev, max_participants: val === '' ? '' : (parseInt(val) || '') }));
-                          }}
-                          required
-                        />
-                      </div>
+                    </div>
+
+                    <div style={{ marginBottom: 12 }}>
+                      <label className="mushy-label" style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginLeft: '6px', marginBottom: '5px' }}>Sĩ số tối đa (cả Host)</label>
+                      <input
+                        type="number"
+                        className="mushy-input"
+                        min="2"
+                        style={{ borderRadius: '14px', border: '1.5px solid var(--hairline)', padding: '10px 14px', fontSize: '13.5px', minHeight: '44px', width: '100%', outline: 'none' }}
+                        value={newRoom.max_participants}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setNewRoom(prev => ({ ...prev, max_participants: val === '' ? '' : (parseInt(val) || '') }));
+                        }}
+                        required
+                      />
                     </div>
 
                     {/* Guest picker to enforce co-creation (PRD Section 4) */}
@@ -2508,6 +2507,130 @@ export default function App() {
                                       fontSize: 10.5,
                                       fontWeight: isSelected ? 700 : 500,
                                       color: isSelected ? 'var(--brand)' : 'var(--ink)',
+                                      textAlign: 'center',
+                                      maxWidth: 72,
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
+                                      whiteSpace: 'nowrap'
+                                    }}
+                                  >
+                                    {m.full_name}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Selected Guests Summary Chips */}
+                      {invitedGuests.length > 0 && (
+                        <div style={{ marginBottom: 14, background: 'rgba(230, 57, 70, 0.03)', padding: '10px 12px', borderRadius: '16px', border: '1px solid rgba(230, 57, 70, 0.1)' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, paddingLeft: 2 }}>
+                            <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--brand)' }}>
+                              👥 Đồng nghiệp đã chọn ({invitedGuests.length}):
+                            </span>
+                            <button
+                              type="button"
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: 'var(--muted)',
+                                fontSize: 11,
+                                fontWeight: 'bold',
+                                cursor: 'pointer',
+                                padding: 0
+                              }}
+                              onClick={() => {
+                                bridge.haptic('light');
+                                setInvitedGuests([]);
+                              }}
+                            >
+                              Xóa tất cả
+                            </button>
+                          </div>
+                          
+                          <div 
+                            style={{ 
+                              display: 'flex', 
+                              gap: 12, 
+                              overflowX: 'auto', 
+                              padding: '4px 2px 6px', 
+                              scrollbarWidth: 'none',
+                              msOverflowStyle: 'none'
+                            }}
+                          >
+                            {invitedGuests.map(guestId => {
+                              const m = members.find(member => member.user_id === guestId) || { user_id: guestId, full_name: 'Đồng nghiệp' };
+                              return (
+                                <div
+                                  key={m.user_id}
+                                  style={{
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    alignItems: 'center',
+                                    gap: 5,
+                                    minWidth: 70,
+                                    position: 'relative',
+                                    userSelect: 'none'
+                                  }}
+                                >
+                                  {/* Avatar circle */}
+                                  <div
+                                    style={{
+                                      width: 44,
+                                      height: 44,
+                                      borderRadius: '50%',
+                                      background: getAvatarGradient(m.full_name?.charAt(0)),
+                                      border: '1.5px solid rgba(255, 255, 255, 0.8)',
+                                      boxShadow: '0 4px 8px rgba(15, 15, 18, 0.05)',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      fontSize: 15,
+                                      fontWeight: 700,
+                                      color: '#fff',
+                                      position: 'relative'
+                                    }}
+                                  >
+                                    <span>{m.full_name?.charAt(0)}</span>
+                                    
+                                    {/* Remove badge */}
+                                    <div
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        bridge.haptic('light');
+                                        setInvitedGuests(prev => prev.filter(id => id !== m.user_id));
+                                      }}
+                                      style={{
+                                        position: 'absolute',
+                                        top: -3,
+                                        right: -3,
+                                        width: 16,
+                                        height: 16,
+                                        borderRadius: '50%',
+                                        background: 'var(--brand)',
+                                        color: '#fff',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        fontSize: 9,
+                                        fontWeight: 'bold',
+                                        border: '1.5px solid #fff',
+                                        cursor: 'pointer',
+                                        boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                                      }}
+                                    >
+                                      ✕
+                                    </div>
+                                  </div>
+                                  
+                                  {/* Name */}
+                                  <span
+                                    style={{
+                                      fontSize: 10,
+                                      fontWeight: 600,
+                                      color: 'var(--ink)',
                                       textAlign: 'center',
                                       maxWidth: 72,
                                       overflow: 'hidden',
