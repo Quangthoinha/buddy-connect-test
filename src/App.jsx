@@ -343,9 +343,21 @@ export default function App() {
   const [radarPage, setRadarPage] = useState(1);
   const RADAR_PAGE_SIZE = 10;
 
+  const [activeChatRoom, setActiveChatRoom] = useState(null);
+  const [chatInput, setChatInput] = useState('');
+
   useEffect(() => {
     setRadarPage(1);
   }, [searchQuery, fallbackEnabled, scope]);
+
+  useEffect(() => {
+    if (activeChatRoom) {
+      setTimeout(() => {
+        const el = document.getElementById('mushy-chat-messages-container');
+        if (el) el.scrollTop = el.scrollHeight;
+      }, 50);
+    }
+  }, [activeChatRoom, rooms]);
   const [shareGrants, setShareGrants] = useState([]);
   const [generatedCode, setGeneratedCode] = useState(null);
   const [loadingGrants, setLoadingGrants] = useState(false);
@@ -1481,6 +1493,51 @@ export default function App() {
     bridge.haptic('light');
     await createRoomNativeChat(room.id, room.location);
     loadData();
+  };
+
+  const parseChatMessages = (chatGroupId) => {
+    try {
+      if (!chatGroupId) return [];
+      if (chatGroupId.startsWith('[') && chatGroupId.endsWith(']')) {
+        return JSON.parse(chatGroupId);
+      }
+    } catch (e) {
+      console.warn('Failed to parse chat messages from chat_group_id:', e);
+    }
+    return [];
+  };
+
+  const getSenderName = (senderId, hostId) => {
+    if (senderId === ctx.userId) return 'Bạn';
+    if (senderId === hostId) return 'Host';
+    const member = members.find(m => m.user_id === senderId);
+    return member ? member.full_name : 'Đồng nghiệp';
+  };
+
+  const handleSendChatMessage = async (room, content) => {
+    if (!content.trim()) return;
+    const currentMessages = parseChatMessages(room.chat_group_id);
+    const newMessage = {
+      id: `msg-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      senderId: ctx.userId,
+      content: content.trim(),
+      timestamp: new Date().toISOString()
+    };
+    const updatedMessages = [...currentMessages, newMessage];
+    const newChatGroupId = JSON.stringify(updatedMessages);
+
+    try {
+      if (room.id.startsWith('mock-')) {
+        setRooms(prev => prev.map(r => r.id === room.id ? { ...r, chat_group_id: newChatGroupId } : r));
+      } else {
+        await db
+          .from('rooms')
+          .update({ chat_group_id: newChatGroupId, updated_at: new Date().toISOString() })
+          .eq('id', room.id);
+      }
+    } catch (e) {
+      console.error('Failed to send chat message:', e);
+    }
   };
 
   // Host withdraw/cancel with reasons (PRD Section 7.2)
@@ -2642,7 +2699,10 @@ export default function App() {
                                 style={{ minHeight: 30, fontSize: 11, padding: '4px 10px', background: '#10B981', color: '#fff' }}
                                 onClick={() => {
                                   bridge.haptic('light');
-                                  callNative('OPEN_CHAT_GROUP', { chatGroupId: room.chat_group_id });
+                                  setActiveChatRoom(room);
+                                  if (isInShell()) {
+                                    callNative('OPEN_CHAT_GROUP', { chatGroupId: room.chat_group_id });
+                                  }
                                 }}
                               >
                                 Vào Chat
@@ -3525,7 +3585,129 @@ export default function App() {
         </div>
       )}
 
+      {/* IN-APP CHAT MODAL */}
+      {activeChatRoom && (() => {
+        const room = rooms.find(r => r.id === activeChatRoom.id) || activeChatRoom;
+        const roomLocation = room.location;
+        const childCode = room.child_code;
+        const messages = parseChatMessages(room.chat_group_id);
+        const hostObj = members.find(m => m.user_id === room.host_id) || (room.host_id === ctx.userId ? { full_name: 'Bạn' } : { full_name: 'Đồng nghiệp' });
 
-    </div>
-  );
-}
+        return (
+          <div className="modal-scrim animated-fade-in" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }} onClick={() => setActiveChatRoom(null)}>
+            <div className="modal-card" style={{ width: '100%', maxWidth: '480px', height: '85vh', maxHeight: '720px', borderRadius: '24px', padding: 0, display: 'flex', flexDirection: 'column', background: 'rgba(255, 255, 255, 0.85)', backdropFilter: 'blur(24px)', border: '1.5px solid rgba(255, 255, 255, 0.45)', boxShadow: '0 20px 40px rgba(0,0,0,0.1)' }} onClick={(e) => e.stopPropagation()}>
+              
+              {/* Chat Header */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid var(--hairline)', background: 'linear-gradient(135deg, rgba(255, 240, 242, 0.8) 0%, rgba(255, 229, 233, 0.8) 100%)', borderTopLeftRadius: '24px', borderTopRightRadius: '24px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ fontSize: 24 }}>💬</span>
+                  <div style={{ textAlign: 'left' }}>
+                    <h3 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: 'var(--ink)' }}>
+                      Kèo: {getTagName(childCode)}
+                    </h3>
+                    <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--muted)' }}>
+                      📍 {roomLocation} · Host: {hostObj.full_name}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setActiveChatRoom(null)}
+                  style={{ background: 'rgba(0,0,0,0.05)', border: 'none', borderRadius: '50%', width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 14, color: 'var(--muted)' }}
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Chat Messages */}
+              <div 
+                id="mushy-chat-messages-container"
+                style={{ flex: 1, overflowY: 'auto', padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: 12, background: 'rgba(255, 255, 255, 0.3)' }}
+              >
+                {messages.length === 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, color: 'var(--muted)', opacity: 0.8 }}>
+                    <span style={{ fontSize: 44, marginBottom: 8 }}>💬🍄</span>
+                    <span style={{ fontSize: 13, fontStyle: 'italic' }}>Chưa có tin nhắn nào trong phòng.</span>
+                    <span style={{ fontSize: 11, marginTop: 4 }}>Hãy là người nhắn lời chào đầu tiên nhé!</span>
+                  </div>
+                ) : (
+                  messages.map((msg) => {
+                    const isMe = msg.senderId === ctx.userId;
+                    const senderName = getSenderName(msg.senderId, room.host_id);
+                    const formattedTime = new Date(msg.timestamp).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+
+                    return (
+                      <div
+                        key={msg.id}
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: isMe ? 'flex-end' : 'flex-start',
+                          width: '100%'
+                        }}
+                      >
+                        <span style={{ fontSize: 10.5, color: 'var(--muted)', marginBottom: 2, marginLeft: isMe ? 0 : 4, marginRight: isMe ? 4 : 0, fontWeight: 600 }}>
+                          {senderName}
+                        </span>
+                        <div
+                          style={{
+                            maxWidth: '75%',
+                            padding: '10px 14px',
+                            borderRadius: '16px',
+                            borderTopRightRadius: isMe ? '4px' : '16px',
+                            borderTopLeftRadius: isMe ? '16px' : '4px',
+                            background: isMe ? 'linear-gradient(135deg, var(--brand) 0%, var(--pink) 100%)' : '#fff',
+                            color: isMe ? '#fff' : 'var(--foreground)',
+                            fontSize: 13,
+                            lineHeight: 1.4,
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.03)',
+                            border: isMe ? 'none' : '1px solid var(--hairline)',
+                            textAlign: 'left',
+                            wordBreak: 'break-word'
+                          }}
+                        >
+                          {msg.content}
+                        </div>
+                        <span style={{ fontSize: 9, color: 'var(--muted)', marginTop: 2, opacity: 0.7 }}>
+                          {formattedTime}
+                        </span>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Chat Input */}
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleSendChatMessage(room, chatInput);
+                  setChatInput('');
+                }}
+                style={{ padding: '14px 16px', borderTop: '1px solid var(--hairline)', background: '#fff', borderBottomLeftRadius: '24px', borderBottomRightRadius: '24px', display: 'flex', gap: 10 }}
+              >
+                <input
+                  type="text"
+                  className="mushy-input"
+                  placeholder="Nhập tin nhắn đi chill..."
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  style={{ flex: 1, margin: 0, borderRadius: '20px', minHeight: '38px', height: '38px', fontSize: '13px', padding: '0 16px' }}
+                />
+                <button
+                  type="submit"
+                  className="mushy-btn mushy-btn--primary"
+                  style={{ minHeight: '38px', height: '38px', borderRadius: '50%', width: '38px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                  disabled={!chatInput.trim()}
+                >
+                  🚀
+                </button>
+              </form>
+
+            </div>
+          </div>
+        );
+      })()}
+
+      </div>
+    );
+  }
