@@ -1944,7 +1944,7 @@ export default function App() {
       </header>
 
       {/* Tab Navigation */}
-      <nav className="tab-navigation">
+      <nav className="tab-navigation tab-navigation-bottom">
         <button
           className={`nav-tab-btn ${activeTab === 'radar' ? 'nav-tab-btn--active' : ''}`}
           onClick={() => { bridge.haptic('light'); setActiveTab('radar'); }}
