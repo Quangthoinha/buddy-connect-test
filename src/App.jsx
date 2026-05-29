@@ -1916,7 +1916,7 @@ export default function App() {
       </header>
 
       {/* Tab Navigation */}
-      <nav className="tab-navigation tab-navigation-bottom">
+      <nav className="tab-navigation tab-navigation-bottom" style={{ gridTemplateColumns: '1fr 1fr 1fr 1fr' }}>
         <button
           className={`nav-tab-btn ${activeTab === 'radar' ? 'nav-tab-btn--active' : ''}`}
           onClick={() => setActiveTab('radar')}
@@ -1937,6 +1937,12 @@ export default function App() {
           {invitations.filter(i => i.receiver_id === ctx.userId && i.status === 'pending').length > 0 && (
             <span className="notification-dot" style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: 'var(--brand)', marginLeft: 2 }} />
           )}
+        </button>
+        <button
+          className={`nav-tab-btn ${activeTab === 'profile' ? 'nav-tab-btn--active' : ''}`}
+          onClick={() => setActiveTab('profile')}
+        >
+          <span>⚙️</span> Hồ Sơ
         </button>
       </nav>
 
@@ -2080,41 +2086,6 @@ export default function App() {
                               ))}
                             </div>
                           </div>
-                        </div>
-
-                        <div className="buddy-actions-compact">
-                          <button
-                            className="mushy-btn mushy-btn--primary compact-btn"
-                            onClick={() => {
-                              bridge.haptic('light');
-                              const primaryTag = exactMatches[0] || FLAT_TAGS.find(t => t.code === tags[0]) || { code: 'badminton', name: 'Cầu lông 🏸' };
-                              setQuickInviteData({ member, tagCode: primaryTag.code || primaryTag.value, tagName: primaryTag.name || primaryTag.label });
-                              setQuickInviteTime(quickTimeOptions[0]?.value || '');
-                            }}
-                          >
-                            ⚡ Rủ nhanh
-                          </button>
-                          
-                          {member.work_phone ? (
-                            <button
-                              className="mushy-btn mushy-btn--ghost compact-btn-phone"
-                              onClick={() => {
-                                bridge.haptic('light');
-                                bridge.tel(member.work_phone);
-                              }}
-                            >
-                              📞 Gọi
-                            </button>
-                          ) : (
-                            <button
-                              className="mushy-btn mushy-btn--ghost compact-btn-phone disabled-phone"
-                              onClick={() => {
-                                dialog.info('Thông tin liên hệ', `${member.full_name} chưa cập nhật số điện thoại native.`);
-                              }}
-                            >
-                              📞
-                            </button>
-                          )}
                         </div>
                       </section>
                     ))
@@ -2966,6 +2937,127 @@ export default function App() {
                     );
                   })
               )}
+            </div>
+          )}
+
+          {/* TAB 4: PROFILE - HỒ SƠ CÁ NHÂN */}
+          {activeTab === 'profile' && (
+            <div className="tab-pane animated-fade-in">
+              <section className="mushy-card" style={{ marginBottom: 16 }}>
+                <h3 className="mushy-section-title" style={{ margin: 0 }}>⚙️ Hồ sơ Connect</h3>
+                <p className="mushy-section-sub" style={{ margin: '4px 0 0' }}>Điền thông tin và chọn sở thích để radar kết nối hoạt động</p>
+              </section>
+
+              <section className="mushy-card">
+                <div style={{ marginBottom: 12 }}>
+                  <label className="mushy-label">Phòng ban trực thuộc (Department)</label>
+                  <input
+                    type="text"
+                    className="mushy-input"
+                    placeholder="Vd: Kỹ thuật (R&D), Kinh doanh, Nhân sự..."
+                    value={myProfile.department}
+                    onChange={(e) => setMyProfile(prev => ({ ...prev, department: e.target.value }))}
+                  />
+                </div>
+
+                <div style={{ marginBottom: 12 }}>
+                  <label className="mushy-label">Cơ sở làm việc (Facility)</label>
+                  <input
+                    type="text"
+                    className="mushy-input"
+                    placeholder="Vd: Cơ sở Hà Nội - Keangnam, Cơ sở Landmark 81..."
+                    value={myProfile.facility}
+                    onChange={(e) => setMyProfile(prev => ({ ...prev, facility: e.target.value }))}
+                  />
+                </div>
+
+                <div style={{ marginBottom: 18 }}>
+                  <label className="mushy-label">Khung giờ rảnh thông thường (Multi-select)</label>
+                  <div className="chips-container" style={{ marginTop: 6 }}>
+                    {['Giờ ăn trưa', 'Chiều sau giờ làm', 'Cuối tuần', 'Tối ngày thường'].map(time => {
+                      const isSelected = myProfile.available_times.includes(time);
+                      return (
+                        <span
+                          key={time}
+                          className={`selectable-chip ${isSelected ? 'selectable-chip--selected' : ''}`}
+                          onClick={() => {
+                            if (isSelected) {
+                              setMyProfile(prev => ({ ...prev, available_times: prev.available_times.filter(t => t !== time) }));
+                            } else {
+                              setMyProfile(prev => ({ ...prev, available_times: [...prev.available_times, time] }));
+                            }
+                          }}
+                        >
+                          ⏰ {time}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div style={{ borderTop: '1px solid var(--hairline)', paddingTop: 18, marginTop: 18 }}>
+                  <h4 style={{ margin: '0 0 10px', fontSize: 14 }}>Thẻ sở thích (Accordion)</h4>
+                  <div className="search-box-container">
+                    <span className="search-icon">🔍</span>
+                    <input
+                      type="text"
+                      className="mushy-input search-input"
+                      placeholder="Gõ từ khóa để lọc nhanh 200 Child Tags..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                  </div>
+
+                  <div style={{ marginTop: 12 }}>
+                    {filteredAccordionTaxonomy.length === 0 ? (
+                      <p style={{ fontSize: 13, color: 'var(--muted)', fontStyle: 'italic', textAlign: 'center', padding: '12px 0' }}>Không tìm thấy thẻ sở thích phù hợp.</p>
+                    ) : (
+                      filteredAccordionTaxonomy.map(parent => {
+                        const isOpen = expandedParents[parent.parent_code] || parent.isAutoExpanded;
+                        return (
+                          <div key={parent.parent_code} className="accordion-item">
+                            <div
+                              className="accordion-header"
+                              onClick={() => toggleParentAccordion(parent.parent_code)}
+                            >
+                              <span>{highlightSearchText(parent.parent_name, searchQuery)}</span>
+                              <span className={`accordion-icon ${isOpen ? 'accordion-icon--open' : ''}`}>▼</span>
+                            </div>
+                            {isOpen && (
+                              <div className="accordion-content">
+                                <div className="chips-container">
+                                  {parent.children.map(c => {
+                                    const isSelected = myTags.includes(c.code);
+                                    return (
+                                      <span
+                                        key={c.code}
+                                        className={`selectable-chip ${isSelected ? 'selectable-chip--selected' : ''}`}
+                                        onClick={() => toggleSelectTag(c.code)}
+                                      >
+                                        {highlightSearchText(c.name, searchQuery)}
+                                      </span>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+
+                <div className="form-actions" style={{ borderTop: '1px solid var(--hairline)', paddingTop: 14, marginTop: 14 }}>
+                  <button
+                    type="button"
+                    className="mushy-btn mushy-btn--primary mushy-btn--block"
+                    onClick={handleSaveProfile}
+                  >
+                    Lưu hồ sơ Connect 🍄
+                  </button>
+                </div>
+              </section>
             </div>
           )}
 
