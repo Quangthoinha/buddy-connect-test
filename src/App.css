@@ -95,22 +95,23 @@
 .nav-tab-btn {
   background: transparent;
   border: none;
+  outline: none;
   font-weight: 700;
   font-size: 14px;
   color: var(--muted);
   padding: 10px;
   border-radius: 999px;
   cursor: pointer;
-  transition: all 250ms ease;
+  transition: background 200ms ease, color 200ms ease, box-shadow 200ms ease;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.nav-tab-btn:active {
-  transform: scale(0.97);
-}
+.nav-tab-btn:focus { outline: none; }
+.nav-tab-btn:focus-visible { outline: none; }
 
 .nav-tab-btn--active {
   background: var(--surface);

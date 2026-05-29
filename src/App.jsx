@@ -1913,51 +1913,25 @@ export default function App() {
             <p className="brand-tagline">Tự tạo phòng hẹn nhanh đi chill & thể thao</p>
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button
-            type="button"
-            className="mushy-btn"
-            style={{
-              minWidth: 40,
-              width: 40,
-              height: 40,
-              minHeight: 40,
-              borderRadius: '50%',
-              padding: 0,
-              background: 'var(--surface-muted)',
-              border: '1px solid var(--hairline)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 18,
-              cursor: 'pointer',
-              boxShadow: 'none'
-            }}
-            onClick={() => { bridge.haptic('light'); setShowProfileModal(true); }}
-            title="Thiết lập hồ sơ"
-          >
-            ⚙️
-          </button>
-        </div>
       </header>
 
       {/* Tab Navigation */}
       <nav className="tab-navigation tab-navigation-bottom">
         <button
           className={`nav-tab-btn ${activeTab === 'radar' ? 'nav-tab-btn--active' : ''}`}
-          onClick={() => { bridge.haptic('light'); setActiveTab('radar'); }}
+          onClick={() => setActiveTab('radar')}
         >
           <span>🛰️</span> Radar
         </button>
         <button
           className={`nav-tab-btn ${activeTab === 'rooms' ? 'nav-tab-btn--active' : ''}`}
-          onClick={() => { bridge.haptic('light'); setActiveTab('rooms'); }}
+          onClick={() => setActiveTab('rooms')}
         >
           <span>🏆</span> Phòng Hẹn
         </button>
         <button
           className={`nav-tab-btn ${activeTab === 'inbox' ? 'nav-tab-btn--active' : ''}`}
-          onClick={() => { bridge.haptic('light'); setActiveTab('inbox'); }}
+          onClick={() => setActiveTab('inbox')}
         >
           <span>📥</span> Lời Mời
           {invitations.filter(i => i.receiver_id === ctx.userId && i.status === 'pending').length > 0 && (
@@ -3371,10 +3345,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Footer */}
-      <footer className="footer" style={{ marginTop: 30, padding: '20px 0', borderTop: '1px solid var(--hairline)' }}>
-        Mushy Connect 🍄 Made with <span className="heart" style={{ color: 'var(--brand)' }}>♥</span> for Internal Employee Engagement
-      </footer>
+
     </div>
   );
 }
