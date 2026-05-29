@@ -1913,6 +1913,36 @@ export default function App() {
             <p className="brand-tagline">Tự tạo phòng hẹn nhanh đi chill & thể thao</p>
           </div>
         </div>
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          <button
+            type="button"
+            className="mushy-btn"
+            style={{
+              minWidth: 38,
+              width: 38,
+              height: 38,
+              minHeight: 38,
+              borderRadius: '50%',
+              padding: 0,
+              background: 'var(--surface-muted)',
+              border: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 17,
+              cursor: 'pointer',
+              boxShadow: 'none',
+              color: 'var(--muted)',
+              transition: 'background 200ms ease, transform 100ms ease'
+            }}
+            onClick={() => { bridge.haptic('light'); setShowProfileModal(true); }}
+            title="Thiết lập hồ sơ"
+            onMouseDown={(e) => e.currentTarget.style.transform = 'scale(0.95)'}
+            onMouseUp={(e) => e.currentTarget.style.transform = 'none'}
+          >
+            ⚙️
+          </button>
+        </div>
       </header>
 
       {/* Tab Navigation */}

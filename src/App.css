@@ -70,27 +70,47 @@
   transform: translateX(-50%);
   width: calc(100% - 36px);
   max-width: calc(720px - 36px);
-  background: rgba(255, 255, 255, 0.82);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.45);
   box-shadow: 0 10px 30px rgba(15, 15, 18, 0.08), 0 1px 0 rgba(255, 255, 255, 0.9) inset;
   z-index: 999;
   margin-bottom: 0;
   padding: 6px;
-  gap: 6px;
+  gap: 4px;
+  border-radius: 24px; /* Beautiful modern rounded rectangle */
 }
 
 .tab-navigation-bottom .nav-tab-btn {
-  padding: 12px 10px;
-  font-size: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 6px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  border-radius: 16px; /* Pill design for the active state */
+  height: 52px;
+  min-height: 52px;
+  transition: background 200ms ease, color 200ms ease, transform 150ms ease;
+  box-shadow: none;
+}
+
+.tab-navigation-bottom .nav-tab-btn span {
+  font-size: 19px;
+  line-height: 1;
+  margin-bottom: 2px;
 }
 
 .tab-navigation-bottom .nav-tab-btn--active {
-  background: var(--surface);
+  background: var(--brand-soft);
   color: var(--brand);
-  box-shadow: 0 4px 12px rgba(15, 15, 18, 0.08);
+  box-shadow: none;
 }
+
 
 .nav-tab-btn {
   background: transparent;
