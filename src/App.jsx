@@ -340,6 +340,12 @@ export default function App() {
   const [submittingQuickInvite, setSubmittingQuickInvite] = useState(false);
 
   const [shareCodeInput, setShareCodeInput] = useState('');
+  const [radarPage, setRadarPage] = useState(1);
+  const RADAR_PAGE_SIZE = 10;
+
+  useEffect(() => {
+    setRadarPage(1);
+  }, [searchQuery, fallbackEnabled, scope]);
   const [shareGrants, setShareGrants] = useState([]);
   const [generatedCode, setGeneratedCode] = useState(null);
   const [loadingGrants, setLoadingGrants] = useState(false);
@@ -2061,65 +2067,98 @@ export default function App() {
                       <h4 className="mushy-empty-title">Radar chưa quét thấy ai</h4>
                       <p className="mushy-empty-desc">Không tìm thấy đồng nghiệp nào trùng thẻ sở thích với bạn. Hãy thử đổi sở thích hoặc chia sẻ workspace nhé!</p>
                     </div>
-                  ) : (
-                    rankedCandidates.map(({ member, profile, tags, exactMatches, priority, isFallback, fallbackParentLabel, matchScore, hasInteracted }) => (
-                      <section key={member.user_id} className="buddy-card-compact">
-                        <div className="buddy-card-main">
-                          <div className="buddy-avatar-compact">
-                            <span>{member.full_name?.charAt(0)}</span>
+                  ) : (() => {
+                    const totalPages = Math.ceil(rankedCandidates.length / RADAR_PAGE_SIZE);
+                    const paginatedCandidates = rankedCandidates.slice((radarPage - 1) * RADAR_PAGE_SIZE, radarPage * RADAR_PAGE_SIZE);
+                    return (
+                      <>
+                        {paginatedCandidates.map(({ member, profile, tags, exactMatches, priority, isFallback, fallbackParentLabel, matchScore, hasInteracted }) => (
+                          <section key={member.user_id} className="buddy-card-compact">
+                            <div className="buddy-card-main">
+                              <div className="buddy-avatar-compact">
+                                <span>{member.full_name?.charAt(0)}</span>
+                              </div>
+                              
+                              <div className="buddy-body-compact">
+                                <div className="buddy-header-row">
+                                  <h4 className="buddy-name-compact">{member.full_name}</h4>
+                                  <span className="buddy-match-badge">{matchScore}% Match</span>
+                                </div>
+                                
+                                <div className="buddy-meta-row">
+                                  <span className="buddy-dept">{profile.department || 'Phòng ban'}</span>
+                                  <span className="buddy-dot-separator">·</span>
+                                  <span className="buddy-facility">{profile.facility || 'Cơ sở'}</span>
+                                </div>
+
+                                <p className="buddy-time-text">
+                                  🕒 Rảnh: {profile.available_times?.join(', ') || 'Chưa cập nhật'}
+                                </p>
+
+                                <div className="buddy-labels-row">
+                                  {/* Show exactly one key badge */}
+                                  {priority === 1 ? (
+                                    <span className="buddy-status-pill priority-high">🔥 Khác phòng ban</span>
+                                  ) : priority === 2 ? (
+                                    <span className="buddy-status-pill priority-same">👥 Cùng phòng ban</span>
+                                  ) : hasInteracted ? (
+                                    <span className="buddy-status-pill priority-interacted">⇆ Đã tương tác</span>
+                                  ) : isFallback ? (
+                                    <span className="buddy-status-pill priority-fallback">💡 Gợi ý nhóm {fallbackParentLabel}</span>
+                                  ) : null}
+
+                                  {/* Clean matching tag chips */}
+                                  {exactMatches.slice(0, 3).map(tag => (
+                                    <span 
+                                      key={tag.code} 
+                                      className="buddy-tag-compact"
+                                      style={{ cursor: 'pointer' }}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        bridge.haptic('light');
+                                        setQuickInviteData({ member, tagCode: tag.code, tagName: tag.name });
+                                        setQuickInviteTime(quickTimeOptions[0]?.value || '');
+                                      }}
+                                      title={`Rủ nhanh ${member.full_name} cùng chơi ${tag.name}`}
+                                    >
+                                      ❤️ {tag.name}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          </section>
+                        ))}
+
+                        {/* Beautiful Pagination Controls */}
+                        {totalPages > 1 && (
+                          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, marginTop: 20, marginBottom: 10 }}>
+                            <button
+                              type="button"
+                              className="mushy-btn mushy-btn--ghost"
+                              disabled={radarPage === 1}
+                              onClick={() => { bridge.haptic('light'); setRadarPage(prev => Math.max(1, prev - 1)); }}
+                              style={{ padding: '6px 14px', minHeight: 34, height: 34, fontSize: 12.5 }}
+                            >
+                              ◀ Trước
+                            </button>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>
+                              Trang {radarPage} / {totalPages}
+                            </span>
+                            <button
+                              type="button"
+                              className="mushy-btn mushy-btn--ghost"
+                              disabled={radarPage === totalPages}
+                              onClick={() => { bridge.haptic('light'); setRadarPage(prev => Math.min(totalPages, prev + 1)); }}
+                              style={{ padding: '6px 14px', minHeight: 34, height: 34, fontSize: 12.5 }}
+                            >
+                              Sau ▶
+                            </button>
                           </div>
-                          
-                          <div className="buddy-body-compact">
-                            <div className="buddy-header-row">
-                              <h4 className="buddy-name-compact">{member.full_name}</h4>
-                              <span className="buddy-match-badge">{matchScore}% Match</span>
-                            </div>
-                            
-                            <div className="buddy-meta-row">
-                              <span className="buddy-dept">{profile.department || 'Phòng ban'}</span>
-                              <span className="buddy-dot-separator">·</span>
-                              <span className="buddy-facility">{profile.facility || 'Cơ sở'}</span>
-                            </div>
-
-                            <p className="buddy-time-text">
-                              🕒 Rảnh: {profile.available_times?.join(', ') || 'Chưa cập nhật'}
-                            </p>
-
-                            <div className="buddy-labels-row">
-                              {/* Show exactly one key badge */}
-                              {priority === 1 ? (
-                                <span className="buddy-status-pill priority-high">🔥 Khác phòng ban</span>
-                              ) : priority === 2 ? (
-                                <span className="buddy-status-pill priority-same">👥 Cùng phòng ban</span>
-                              ) : hasInteracted ? (
-                                <span className="buddy-status-pill priority-interacted">⇆ Đã tương tác</span>
-                              ) : isFallback ? (
-                                <span className="buddy-status-pill priority-fallback">💡 Gợi ý nhóm {fallbackParentLabel}</span>
-                              ) : null}
-
-                              {/* Clean matching tag chips */}
-                              {exactMatches.slice(0, 3).map(tag => (
-                                <span 
-                                  key={tag.code} 
-                                  className="buddy-tag-compact"
-                                  style={{ cursor: 'pointer' }}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    bridge.haptic('light');
-                                    setQuickInviteData({ member, tagCode: tag.code, tagName: tag.name });
-                                    setQuickInviteTime(quickTimeOptions[0]?.value || '');
-                                  }}
-                                  title={`Rủ nhanh ${member.full_name} cùng chơi ${tag.name}`}
-                                >
-                                  ❤️ {tag.name}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-                      </section>
-                    ))
-                  )}
+                        )}
+                      </>
+                    );
+                  })()}
                 </>
               )}
             </div>
@@ -2508,14 +2547,24 @@ export default function App() {
               </section>
 
               {/* Rooms list */}
-              {rooms.length === 0 ? (
-                <div className="mushy-empty-state animated-fade-in">
-                  <div className="mushy-empty-icon">🏆✨</div>
-                  <h4 className="mushy-empty-title">Chưa có phòng hẹn nào được tạo</h4>
-                  <p className="mushy-empty-desc">Hãy là người tiên phong lập kèo thể thao hoặc đi chill đầu tiên cùng các đồng nghiệp nhé!</p>
-                </div>
-              ) : (
-                rooms.map(room => {
+              {(() => {
+                const userRooms = rooms.filter(room => {
+                  const isHost = room.host_id === ctx.userId;
+                  const hasJoined = invitations.some(i => i.room_id === room.id && i.receiver_id === ctx.userId && i.status === 'accepted');
+                  return isHost || hasJoined;
+                });
+
+                if (userRooms.length === 0) {
+                  return (
+                    <div className="mushy-empty-state animated-fade-in">
+                      <div className="mushy-empty-icon">🏆✨</div>
+                      <h4 className="mushy-empty-title">Bạn chưa tham gia phòng hẹn nào</h4>
+                      <p className="mushy-empty-desc">Nhấn "+ Lập Kèo" để tự tạo phòng mới hoặc nhận lời mời từ đồng nghiệp để cùng tham gia nhé!</p>
+                    </div>
+                  );
+                }
+
+                return userRooms.map(room => {
                   const isHost = room.host_id === ctx.userId;
                   const roomInvs = invitations.filter(i => i.room_id === room.id);
                   const acceptedCount = roomInvs.filter(i => i.status === 'accepted').length;
@@ -2583,7 +2632,7 @@ export default function App() {
 </div>
 
                       {/* 7.1 Distributed Fault-Tolerance Group Chat Status */}
-                      {room.status === 'matched' && (
+                      {(room.status === 'matched' || isFull) && (
                         <div style={{ marginTop: 12, background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.15)', borderRadius: 10, padding: '8px 12px' }}>
                           {room.chat_group_id ? (
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -2881,7 +2930,7 @@ export default function App() {
                     </div>
                   );
                 })
-              )}
+              })()}
             </div>
           )}
 
