@@ -2948,14 +2948,23 @@ export default function App() {
                           inv.status === 'pending' && (
                             <div style={{ display: 'flex', gap: 10, marginTop: 12, borderTop: '1px solid var(--hairline)', paddingTop: 12 }}>
                               <button
-                                className="mushy-btn mushy-btn--primary mushy-btn--block"
+                                className="mushy-btn mushy-btn--primary"
+                                style={{ flex: 1, minHeight: 38, height: 38, padding: '0 16px', fontSize: 13.5 }}
                                 onClick={() => handleAcceptInvitation(inv)}
                               >
                                 Chấp nhận tham gia
                               </button>
                               <button
                                 className="mushy-btn mushy-btn--ghost"
-                                style={{ color: 'var(--danger)', borderColor: 'var(--danger)', padding: '10px 14px' }}
+                                style={{ 
+                                  color: 'var(--danger)', 
+                                  borderColor: 'var(--danger)', 
+                                  minHeight: 38, 
+                                  height: 38, 
+                                  padding: '0 16px', 
+                                  fontSize: 13.5, 
+                                  whiteSpace: 'nowrap' 
+                                }}
                                 onClick={() => handleDeclineInvitation(inv)}
                               >
                                 Từ chối
