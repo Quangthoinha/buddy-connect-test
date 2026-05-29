@@ -15,7 +15,6 @@ import {
 import { mushyApi } from './lib/mushy-api.js';
 import { useDialog } from './components/Dialog.jsx';
 import Select from './components/Select.jsx';
-import ScopeSwitcher from './components/ScopeSwitcher.jsx';
 import { subscribeToTable } from './lib/realtime.js';
 import './App.css';
 
@@ -1915,7 +1914,6 @@ export default function App() {
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <ScopeSwitcher onManageGrants={handleOpenSharing} />
           <button
             type="button"
             className="mushy-btn"
