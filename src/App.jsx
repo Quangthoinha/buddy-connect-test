@@ -1195,9 +1195,10 @@ export default function App() {
     const selected = shuffled.slice(0, limit);
 
     setInvitedGuests(selected.map(m => m.user_id));
+    const namesStr = selected.map(m => m.full_name).join(', ');
     dialog.success(
       'Đã chọn ngẫu nhiên',
-      `Đã tự động chọn ngẫu nhiên ${selected.length} đồng nghiệp (${randomMode === 'mix' ? 'lạ/quen mix' : randomMode === 'strangers' ? 'chỉ người lạ' : 'chỉ người quen'}) vào danh sách mời!`
+      `Đã chọn ${selected.length} đồng nghiệp (${randomMode === 'mix' ? 'lạ/quen mix' : randomMode === 'strangers' ? 'chỉ người lạ' : 'chỉ người quen'}) vào danh sách mời:\n\n${namesStr}`
     );
   };
 
@@ -2280,7 +2281,7 @@ export default function App() {
                   <form onSubmit={handleCreateRoomSubmit} className="form-slide-down" style={{ marginTop: 20, borderTop: '1px solid var(--hairline)', paddingTop: 16 }}>
                     <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
                       <div style={{ flex: 1 }}>
-                        <label className="mushy-label" style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginLeft: '6px', marginBottom: '5px', minHeight: '28px', display: 'flex', alignItems: 'flex-end', paddingBottom: '2px' }}>Danh mục chính</label>
+                        <label className="mushy-label" style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginLeft: '6px', marginBottom: '5px', minHeight: '28px' }}>Danh mục chính</label>
                         <Select
                           value={selectedParentCode}
                           onChange={handleParentChange}
@@ -2288,7 +2289,7 @@ export default function App() {
                         />
                       </div>
                       <div style={{ flex: 1 }}>
-                        <label className="mushy-label" style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginLeft: '6px', marginBottom: '5px', minHeight: '28px', display: 'flex', alignItems: 'flex-end', paddingBottom: '2px' }}>Bộ môn / Sở thích cụ thể</label>
+                        <label className="mushy-label" style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginLeft: '6px', marginBottom: '5px', minHeight: '28px' }}>Bộ môn / Sở thích cụ thể</label>
                         <Select
                           value={newRoom.child_code}
                           onChange={(val) => setNewRoom(prev => ({ ...prev, child_code: val }))}
@@ -2298,7 +2299,7 @@ export default function App() {
                     </div>
 
                     <div style={{ marginBottom: 12 }}>
-                      <label className="mushy-label" style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginLeft: '6px', marginBottom: '5px' }}>Vị trí / Địa điểm hẹn</label>
+                      <label className="mushy-label" style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginLeft: '6px', marginBottom: '5px', minHeight: '28px' }}>Vị trí / Địa điểm hẹn</label>
                       <input
                         type="text"
                         className="mushy-input"
@@ -2311,7 +2312,7 @@ export default function App() {
                     </div>
 
                     <div style={{ marginBottom: 12 }}>
-                      <label className="mushy-label" style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginLeft: '6px', marginBottom: '5px' }}>Thời gian hẹn tổ chức</label>
+                      <label className="mushy-label" style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginLeft: '6px', marginBottom: '5px', minHeight: '28px' }}>Thời gian hẹn tổ chức</label>
                       <input
                         type="datetime-local"
                         className="mushy-input"
@@ -2330,7 +2331,7 @@ export default function App() {
                     </div>
 
                     <div style={{ marginBottom: 12 }}>
-                      <label className="mushy-label" style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginLeft: '6px', marginBottom: '5px' }}>Sĩ số tối đa (cả Host)</label>
+                      <label className="mushy-label" style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginLeft: '6px', marginBottom: '5px', minHeight: '28px' }}>Sĩ số tối đa</label>
                       <input
                         type="number"
                         className="mushy-input"
