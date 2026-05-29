@@ -855,14 +855,7 @@ export default function App() {
 
       if (roomErr) throw roomErr;
 
-      // 2. Add host as a participant automatically
-      await db.from('activity_participants').insert({
-        activity_id: room.id,
-        user_id: ctx.userId,
-        workspace_id: activeWs,
-      });
-
-      // 3. Send invitation to the selected colleague
+      // 2. Send invitation to the selected colleague
       const { error: invErr } = await db.from('invitations').insert({
         workspace_id: activeWs,
         room_id: room.id,
