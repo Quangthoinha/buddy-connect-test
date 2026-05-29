@@ -2319,120 +2319,95 @@ export default function App() {
 
                     {/* Guest picker to enforce co-creation (PRD Section 4) */}
                     <div style={{ marginBottom: 16 }}>
-                      <label className="mushy-label" style={{ color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span style={{ color: 'var(--brand)' }}>⚠️</span> Gửi lời mời đầu tiên (Chọn ít nhất 1 người)
-                      </label>
-
-                      {/* 🎲 Bộ lọc mời ngẫu nhiên và mix lạ quen */}
-                      {members.length > 0 && (
-                        <div style={{ background: '#FFFDFD', border: '1.5px solid rgba(230, 57, 70, 0.12)', borderRadius: 14, padding: 12, marginBottom: 14 }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                            <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--ink)' }}>🎲 Lựa chọn vòng kết nối:</span>
-                            <div className="tab-navigation" style={{ margin: 0, padding: 2, gap: 2, gridTemplateColumns: '1fr 1fr 1fr', minHeight: 28, borderRadius: 8 }}>
-                              <button
-                                type="button"
-                                className={`nav-tab-btn ${randomMode === 'mix' ? 'nav-tab-btn--active' : ''}`}
-                                style={{ padding: '2px 8px', fontSize: 10, borderRadius: 6 }}
-                                onClick={() => setRandomMode('mix')}
-                              >
-                                🌀 Mix
-                              </button>
-                              <button
-                                type="button"
-                                className={`nav-tab-btn ${randomMode === 'strangers' ? 'nav-tab-btn--active' : ''}`}
-                                style={{ padding: '2px 8px', fontSize: 10, borderRadius: 6 }}
-                                onClick={() => setRandomMode('strangers')}
-                              >
-                                🕵️ Người lạ
-                              </button>
-                              <button
-                                type="button"
-                                className={`nav-tab-btn ${randomMode === 'acquaintances' ? 'nav-tab-btn--active' : ''}`}
-                                style={{ padding: '2px 8px', fontSize: 10, borderRadius: 6 }}
-                                onClick={() => setRandomMode('acquaintances')}
-                              >
-                                👥 Quen
-                              </button>
-                            </div>
-                          </div>
-
-                          <div style={{ display: 'flex', gap: 8 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                        <label className="mushy-label" style={{ color: 'var(--ink)', margin: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ color: 'var(--brand)' }}>⚠️</span> Gửi lời mời đầu tiên (Chọn ít nhất 1 người)
+                        </label>
+                        {members.length > 0 && (
+                          <div style={{ display: 'flex', gap: 6 }}>
                             <button
                               type="button"
                               className="mushy-btn"
                               disabled={matchingTagMembers.length === 0}
                               onClick={() => handleSelectRandomGuests('same_tag', createRoomAllowedLimit)}
                               style={{
-                                flex: 1,
-                                minHeight: 34,
-                                fontSize: 11,
-                                padding: '4px 10px',
-                                background: matchingTagMembers.length === 0 ? 'rgba(15,15,18,0.03)' : 'rgba(230, 57, 70, 0.06)',
-                                borderColor: matchingTagMembers.length === 0 ? 'var(--hairline)' : 'rgba(230, 57, 70, 0.3)',
+                                minHeight: 26,
+                                height: 26,
+                                fontSize: 10.5,
+                                padding: '2px 10px',
+                                background: matchingTagMembers.length === 0 ? 'rgba(15,15,18,0.02)' : 'rgba(230, 57, 70, 0.07)',
+                                borderColor: matchingTagMembers.length === 0 ? 'var(--hairline)' : 'rgba(230, 57, 70, 0.25)',
                                 color: matchingTagMembers.length === 0 ? 'var(--muted)' : 'var(--brand)',
-                                fontWeight: 'bold',
-                                borderRadius: 8,
+                                fontWeight: 700,
+                                borderRadius: 6,
                                 opacity: matchingTagMembers.length === 0 ? 0.6 : 1,
                                 cursor: matchingTagMembers.length === 0 ? 'not-allowed' : 'pointer'
                               }}
                             >
-                              🎲 Mời ngẫu nhiên trùng tag ({matchingTagMembers.length})
+                              🎲 Trùng tag ({matchingTagMembers.length})
                             </button>
                             <button
                               type="button"
                               className="mushy-btn"
-                              onClick={() => {
-                                handleSelectRandomGuests('any', Math.min(3, createRoomAllowedLimit));
-                              }}
+                              onClick={() => handleSelectRandomGuests('any', Math.min(3, createRoomAllowedLimit))}
                               style={{
-                                flex: 1,
-                                minHeight: 34,
-                                fontSize: 11,
-                                padding: '4px 10px',
-                                background: 'rgba(6, 182, 212, 0.06)',
-                                borderColor: 'rgba(6, 182, 212, 0.3)',
+                                minHeight: 26,
+                                height: 26,
+                                fontSize: 10.5,
+                                padding: '2px 10px',
+                                background: 'rgba(6, 182, 212, 0.07)',
+                                borderColor: 'rgba(6, 182, 212, 0.25)',
                                 color: '#06B6D4',
-                                fontWeight: 'bold',
-                                borderRadius: 8
+                                fontWeight: 700,
+                                borderRadius: 6,
+                                cursor: 'pointer'
                               }}
                             >
-                              🎲 Mời ngẫu nhiên kết bạn mới
+                              🎲 Ghép bạn mới
                             </button>
                           </div>
-                        </div>
-                      )}
+                        )}
+                      </div>
 
-                      {/* 🔥 Gợi ý mời nhanh (Trùng sở thích) */}
+                      {/* Horizontal Scrolling Avatar Chips for matching-tag members */}
                       {matchingTagMembers.length > 0 && (
-                        <div style={{ marginBottom: 12 }}>
-                          <div className="matching-tags-header">
-                            <span>🔥 Gợi ý mời nhanh (Trùng sở thích {FLAT_TAGS.find(t => t.code === newRoom.child_code)?.name || ''}):</span>
+                        <div style={{ marginBottom: 14 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)' }}>
+                              🔥 Gợi ý trùng sở thích ({matchingTagMembers.length}):
+                            </span>
                             <button
                               type="button"
-                              className="mushy-btn"
-                              onClick={handleSelectAllMatchingTagMembers}
                               style={{
-                                minHeight: 24,
-                                fontSize: 10,
-                                padding: '2px 8px',
-                                marginLeft: 'auto',
-                                background: 'linear-gradient(135deg, var(--brand) 0%, var(--pink) 100%)',
+                                background: 'none',
                                 border: 'none',
-                                color: '#fff',
+                                color: 'var(--brand)',
+                                fontSize: 11,
                                 fontWeight: 'bold',
-                                borderRadius: 6
+                                cursor: 'pointer',
+                                padding: 0
                               }}
+                              onClick={handleSelectAllMatchingTagMembers}
                             >
-                              ✨ Chọn tất cả ({matchingTagMembers.length})
+                              ✨ Chọn tất cả
                             </button>
                           </div>
-                          <div className="matching-tags-chip-container">
+                          
+                          <div 
+                            style={{ 
+                              display: 'flex', 
+                              gap: 12, 
+                              overflowX: 'auto', 
+                              padding: '6px 2px 10px', 
+                              scrollbarWidth: 'none',
+                              msOverflowStyle: 'none'
+                            }}
+                          >
                             {matchingTagMembers.map(m => {
                               const isSelected = invitedGuests.includes(m.user_id);
                               return (
                                 <div
                                   key={m.user_id}
-                                  className={`matching-tag-chip ${isSelected ? 'matching-tag-chip--selected' : ''}`}
                                   onClick={() => {
                                     bridge.haptic('light');
                                     if (isSelected) {
@@ -2445,9 +2420,76 @@ export default function App() {
                                       setInvitedGuests(prev => [...prev, m.user_id]);
                                     }
                                   }}
+                                  style={{
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    alignItems: 'center',
+                                    gap: 6,
+                                    minWidth: 70,
+                                    cursor: 'pointer',
+                                    position: 'relative',
+                                    userSelect: 'none'
+                                  }}
                                 >
-                                  <span>👤 {m.full_name}</span>
-                                  {isSelected && <span>✓</span>}
+                                  {/* Avatar circle */}
+                                  <div
+                                    style={{
+                                      width: 48,
+                                      height: 48,
+                                      borderRadius: '50%',
+                                      background: isSelected ? 'linear-gradient(135deg, var(--brand) 0%, var(--pink) 100%)' : 'var(--brand-soft)',
+                                      border: isSelected ? '2px solid #fff' : '1.5px solid rgba(230, 57, 70, 0.15)',
+                                      boxShadow: isSelected ? '0 0 10px rgba(230, 57, 70, 0.4)' : 'none',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      fontSize: 16,
+                                      fontWeight: 700,
+                                      color: isSelected ? '#fff' : 'var(--brand)',
+                                      transition: 'all 200ms ease',
+                                      position: 'relative'
+                                    }}
+                                  >
+                                    <span>{m.full_name?.charAt(0)}</span>
+                                    {isSelected && (
+                                      <div
+                                        style={{
+                                          position: 'absolute',
+                                          bottom: -2,
+                                          right: -2,
+                                          width: 18,
+                                          height: 18,
+                                          borderRadius: '50%',
+                                          background: '#4CAF50',
+                                          color: '#fff',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          fontSize: 10,
+                                          fontWeight: 'bold',
+                                          border: '1.5px solid #fff'
+                                        }}
+                                      >
+                                        ✓
+                                      </div>
+                                    )}
+                                  </div>
+                                  
+                                  {/* Name */}
+                                  <span
+                                    style={{
+                                      fontSize: 11,
+                                      fontWeight: isSelected ? 700 : 500,
+                                      color: isSelected ? 'var(--brand)' : 'var(--ink)',
+                                      textAlign: 'center',
+                                      maxWidth: 72,
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
+                                      whiteSpace: 'nowrap'
+                                    }}
+                                  >
+                                    {m.full_name}
+                                  </span>
                                 </div>
                               );
                             })}
@@ -2461,7 +2503,7 @@ export default function App() {
                           <span className="search-icon">🔍</span>
                           <input
                             type="text"
-                            placeholder="Gõ tìm kiếm tên đồng nghiệp nhanh..."
+                            placeholder="Gõ tìm kiếm tên đồng nghiệp khác..."
                             className="mushy-input search-input"
                             style={{ minHeight: 38, paddingLeft: 38, fontSize: '13px', borderRadius: 10 }}
                             value={guestSearchQuery}
@@ -2470,113 +2512,119 @@ export default function App() {
                         </div>
                       )}
 
-                      <div className="guest-selector-scroll" style={{ background: 'var(--surface-muted)', border: '1.5px solid var(--hairline)' }}>
-                        {members.length === 0 ? (
-                          <div style={{ textAlign: 'center', padding: '16px 8px', color: 'var(--muted)' }}>
-                            <span style={{ fontSize: 24, display: 'block', marginBottom: 4 }}>👥💤</span>
-                            <span style={{ fontSize: 12, fontStyle: 'italic' }}>Mọi người trong Workspace hiện đều bận hoặc offline.</span>
-                          </div>
-                        ) : (
-                          <>
-                            {sortedMembersForCreate.matching.length > 0 && (
-                              <div style={{ padding: '8px 12px 4px', fontSize: 10, fontWeight: 'bold', color: 'var(--brand)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                                🔥 Đồng nghiệp cùng sở thích ({sortedMembersForCreate.matching.length})
-                              </div>
-                            )}
-                            {sortedMembersForCreate.matching.map(item => {
-                              const m = item.member;
-                              const isSelected = invitedGuests.includes(m.user_id);
-                              return (
-                                <div
-                                  key={m.user_id}
-                                  className={`guest-select-item ${isSelected ? 'guest-select-item--selected' : ''}`}
-                                  style={{ borderLeft: '3px solid var(--brand)', marginLeft: 4, marginRight: 4 }}
-                                  onClick={() => {
-                                    bridge.haptic('light');
-                                    if (isSelected) {
-                                      setInvitedGuests(prev => prev.filter(id => id !== m.user_id));
-                                    } else {
-                                      if (invitedGuests.length >= createRoomAllowedLimit) {
-                                        dialog.error('Hạn ngạch đầy!', `Chỉ có thể mời tối đa ${createRoomAllowedLimit} người cho phòng này.`);
-                                        return;
-                                      }
-                                      setInvitedGuests(prev => [...prev, m.user_id]);
-                                    }
-                                  }}
-                                >
-                                  <div>
-                                    <span style={{ fontSize: 13, fontWeight: 700 }}>
-                                      {m.full_name}
-                                      {item.hasInteracted ? (
-                                        <span style={{ fontSize: 9.5, padding: '1px 6px', background: 'rgba(230, 57, 70, 0.08)', color: 'var(--brand)', borderRadius: 4, marginLeft: 6, fontWeight: 'bold' }}>👥 Đã quen</span>
-                                      ) : (
-                                        <span style={{ fontSize: 9.5, padding: '1px 6px', background: 'rgba(6, 182, 212, 0.08)', color: '#06B6D4', borderRadius: 4, marginLeft: 6, fontWeight: 'bold' }}>🕵️ Người lạ</span>
-                                      )}
-                                    </span>
-                                    <span style={{ fontSize: 10, color: 'var(--muted)', display: 'block' }}>🔥 Trùng tag: {getTagName(newRoom.child_code)}</span>
-                                  </div>
-                                  <input
-                                    type="checkbox"
-                                    checked={isSelected}
-                                    readOnly
-                                    style={{ accentColor: 'var(--brand)' }}
-                                  />
+                      {/* Search Results list - Hidden by default unless query is not empty */}
+                      {guestSearchQuery.trim() !== '' ? (
+                        <div className="guest-selector-scroll" style={{ background: 'var(--surface-muted)', border: '1.5px solid var(--hairline)', maxHeight: 200, overflowY: 'auto', borderRadius: 12 }}>
+                          {sortedMembersForCreate.matching.length === 0 && sortedMembersForCreate.others.length === 0 ? (
+                            <div style={{ textAlign: 'center', padding: '16px 8px', color: 'var(--muted)', fontSize: 12, fontStyle: 'italic' }}>
+                              Không tìm thấy kết quả phù hợp.
+                            </div>
+                          ) : (
+                            <>
+                              {sortedMembersForCreate.matching.length > 0 && (
+                                <div style={{ padding: '8px 12px 4px', fontSize: 10, fontWeight: 'bold', color: 'var(--brand)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                  🔥 Trùng sở thích ({sortedMembersForCreate.matching.length})
                                 </div>
-                              );
-                            })}
-
-                            {sortedMembersForCreate.matching.length > 0 && sortedMembersForCreate.others.length > 0 && (
-                              <div style={{ margin: '8px 12px 4px', borderTop: '1px solid var(--hairline)' }} />
-                            )}
-
-                            {sortedMembersForCreate.others.length > 0 && (
-                              <div style={{ padding: '8px 12px 4px', fontSize: 10, fontWeight: 'bold', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                                👥 Thành viên khác ({sortedMembersForCreate.others.length})
-                              </div>
-                            )}
-                            {sortedMembersForCreate.others.map(item => {
-                              const m = item.member;
-                              const isSelected = invitedGuests.includes(m.user_id);
-                              return (
-                                <div
-                                  key={m.user_id}
-                                  className={`guest-select-item ${isSelected ? 'guest-select-item--selected' : ''}`}
-                                  style={{ marginLeft: 4, marginRight: 4 }}
-                                  onClick={() => {
-                                    bridge.haptic('light');
-                                    if (isSelected) {
-                                      setInvitedGuests(prev => prev.filter(id => id !== m.user_id));
-                                    } else {
-                                      if (invitedGuests.length >= createRoomAllowedLimit) {
-                                        dialog.error('Hạn ngạch đầy!', `Chỉ có thể mời tối đa ${createRoomAllowedLimit} người cho phòng này.`);
-                                        return;
+                              )}
+                              {sortedMembersForCreate.matching.map(item => {
+                                const m = item.member;
+                                const isSelected = invitedGuests.includes(m.user_id);
+                                return (
+                                  <div
+                                    key={m.user_id}
+                                    className={`guest-select-item ${isSelected ? 'guest-select-item--selected' : ''}`}
+                                    style={{ borderLeft: '3px solid var(--brand)', marginLeft: 4, marginRight: 4 }}
+                                    onClick={() => {
+                                      bridge.haptic('light');
+                                      if (isSelected) {
+                                        setInvitedGuests(prev => prev.filter(id => id !== m.user_id));
+                                      } else {
+                                        if (invitedGuests.length >= createRoomAllowedLimit) {
+                                          dialog.error('Hạn ngạch đầy!', `Chỉ có thể mời tối đa ${createRoomAllowedLimit} người cho phòng này.`);
+                                          return;
+                                        }
+                                        setInvitedGuests(prev => [...prev, m.user_id]);
                                       }
-                                      setInvitedGuests(prev => [...prev, m.user_id]);
-                                    }
-                                  }}
-                                >
-                                  <div>
-                                    <span style={{ fontSize: 13, fontWeight: 500 }}>
-                                      {m.full_name}
-                                      {item.hasInteracted ? (
-                                        <span style={{ fontSize: 9.5, padding: '1px 6px', background: 'rgba(230, 57, 70, 0.08)', color: 'var(--brand)', borderRadius: 4, marginLeft: 6, fontWeight: 'bold' }}>👥 Đã quen</span>
-                                      ) : (
-                                        <span style={{ fontSize: 9.5, padding: '1px 6px', background: 'rgba(6, 182, 212, 0.08)', color: '#06B6D4', borderRadius: 4, marginLeft: 6, fontWeight: 'bold' }}>🕵️ Người lạ</span>
-                                      )}
-                                    </span>
+                                    }}
+                                  >
+                                    <div>
+                                      <span style={{ fontSize: 13, fontWeight: 700 }}>
+                                        {m.full_name}
+                                        {item.hasInteracted ? (
+                                          <span style={{ fontSize: 9.5, padding: '1px 6px', background: 'rgba(230, 57, 70, 0.08)', color: 'var(--brand)', borderRadius: 4, marginLeft: 6, fontWeight: 'bold' }}>👥 Quen</span>
+                                        ) : (
+                                          <span style={{ fontSize: 9.5, padding: '1px 6px', background: 'rgba(6, 182, 212, 0.08)', color: '#06B6D4', borderRadius: 4, marginLeft: 6, fontWeight: 'bold' }}>🕵️ Lạ</span>
+                                        )}
+                                      </span>
+                                      <span style={{ fontSize: 10, color: 'var(--muted)', display: 'block' }}>🔥 Trùng tag: {getTagName(newRoom.child_code)}</span>
+                                    </div>
+                                    <input
+                                      type="checkbox"
+                                      checked={isSelected}
+                                      readOnly
+                                      style={{ accentColor: 'var(--brand)' }}
+                                    />
                                   </div>
-                                  <input
-                                    type="checkbox"
-                                    checked={isSelected}
-                                    readOnly
-                                    style={{ accentColor: 'var(--brand)' }}
-                                  />
+                                );
+                              })}
+
+                              {sortedMembersForCreate.matching.length > 0 && sortedMembersForCreate.others.length > 0 && (
+                                <div style={{ margin: '8px 12px 4px', borderTop: '1px solid var(--hairline)' }} />
+                              )}
+
+                              {sortedMembersForCreate.others.length > 0 && (
+                                <div style={{ padding: '8px 12px 4px', fontSize: 10, fontWeight: 'bold', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                  👥 Thành viên khác ({sortedMembersForCreate.others.length})
                                 </div>
-                              );
-                            })}
-                          </>
-                        )}
-                      </div>
+                              )}
+                              {sortedMembersForCreate.others.map(item => {
+                                const m = item.member;
+                                const isSelected = invitedGuests.includes(m.user_id);
+                                return (
+                                  <div
+                                    key={m.user_id}
+                                    className={`guest-select-item ${isSelected ? 'guest-select-item--selected' : ''}`}
+                                    style={{ marginLeft: 4, marginRight: 4 }}
+                                    onClick={() => {
+                                      bridge.haptic('light');
+                                      if (isSelected) {
+                                        setInvitedGuests(prev => prev.filter(id => id !== m.user_id));
+                                      } else {
+                                        if (invitedGuests.length >= createRoomAllowedLimit) {
+                                          dialog.error('Hạn ngạch đầy!', `Chỉ có thể mời tối đa ${createRoomAllowedLimit} người cho phòng này.`);
+                                          return;
+                                        }
+                                        setInvitedGuests(prev => [...prev, m.user_id]);
+                                      }
+                                    }}
+                                  >
+                                    <div>
+                                      <span style={{ fontSize: 13, fontWeight: 500 }}>
+                                        {m.full_name}
+                                        {item.hasInteracted ? (
+                                          <span style={{ fontSize: 9.5, padding: '1px 6px', background: 'rgba(230, 57, 70, 0.08)', color: 'var(--brand)', borderRadius: 4, marginLeft: 6, fontWeight: 'bold' }}>👥 Quen</span>
+                                        ) : (
+                                          <span style={{ fontSize: 9.5, padding: '1px 6px', background: 'rgba(6, 182, 212, 0.08)', color: '#06B6D4', borderRadius: 4, marginLeft: 6, fontWeight: 'bold' }}>🕵️ Lạ</span>
+                                        )}
+                                      </span>
+                                    </div>
+                                    <input
+                                      type="checkbox"
+                                      checked={isSelected}
+                                      readOnly
+                                      style={{ accentColor: 'var(--brand)' }}
+                                    />
+                                  </div>
+                                );
+                              })}
+                            </>
+                          )}
+                        </div>
+                      ) : (
+                        <div style={{ textAlign: 'center', padding: '12px 6px', color: 'var(--muted)', fontSize: 12 }}>
+                          💡 Nhập tên vào ô tìm kiếm trên để tìm & mời thêm đồng nghiệp khác ngoài sở thích.
+                        </div>
+                      )}
 
                       {/* Thống kê hạn ngạch */}
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 11, color: 'var(--muted)' }}>
