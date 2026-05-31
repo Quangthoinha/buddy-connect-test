@@ -2045,36 +2045,6 @@ export default function App() {
             <p className="brand-tagline">Tự tạo phòng hẹn nhanh đi chill & thể thao</p>
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center' }}>
-          <button
-            type="button"
-            className="mushy-btn"
-            style={{
-              minWidth: 38,
-              width: 38,
-              height: 38,
-              minHeight: 38,
-              borderRadius: '50%',
-              padding: 0,
-              background: 'var(--surface-muted)',
-              border: 'none',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 17,
-              cursor: 'pointer',
-              boxShadow: 'none',
-              color: 'var(--muted)',
-              transition: 'background 200ms ease, transform 100ms ease'
-            }}
-            onClick={() => { bridge.haptic('light'); setShowProfileModal(true); }}
-            title="Thiết lập hồ sơ"
-            onMouseDown={(e) => e.currentTarget.style.transform = 'scale(0.95)'}
-            onMouseUp={(e) => e.currentTarget.style.transform = 'none'}
-          >
-            ⚙️
-          </button>
-        </div>
       </header>
 
       {/* Tab Navigation */}
@@ -2313,19 +2283,27 @@ export default function App() {
           {/* TAB 2: ROOMS - PHÒNG HẸN KẾT NỐI */}
           {activeTab === 'rooms' && (
             <div className="tab-pane animated-fade-in">
-              <section className="mushy-card premium-glow-card" style={{ marginBottom: 16 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <h3 className="mushy-section-title" style={{ margin: 0 }}>🏆 Phòng hẹn Connect</h3>
-                    <p className="mushy-section-sub" style={{ margin: '4px 0 0' }}>Tự lập hoặc tham gia phòng đi chill, thể thao cùng đồng nghiệp</p>
-                  </div>
+              <div className="compact-tab-header">
+                <div className="radar-pulse-wrapper" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, width: 24, height: 24 }}>
+                  🏆
+                </div>
+                <div className="radar-text-wrapper" style={{ flex: 1 }}>
+                  <h4 className="compact-radar-title" style={{ margin: 0, fontSize: '13.5px', fontWeight: 700 }}>Phòng hẹn Connect</h4>
+                  <p className="compact-radar-sub" style={{ margin: '1px 0 0', fontSize: '11px', color: 'var(--muted)' }}>Tự lập hoặc tham gia phòng đi chơi, thể thao cùng đồng nghiệp</p>
+                </div>
+                <div className="compact-radar-action">
                   <button
                     className={`mushy-btn ${showCreateRoom ? 'mushy-btn--ghost' : 'mushy-btn--primary'}`}
                     style={{ 
-                      padding: '8px 16px', 
-                      minHeight: 40,
-                      color: showCreateRoom ? 'var(--brand)' : undefined,
-                      borderColor: showCreateRoom ? 'var(--brand)' : undefined
+                      padding: '6px 12px', 
+                      minHeight: 30,
+                      fontSize: '11.5px',
+                      fontWeight: 700,
+                      borderRadius: 999,
+                      color: showCreateRoom ? 'var(--brand)' : '#fff',
+                      borderColor: showCreateRoom ? 'var(--brand)' : undefined,
+                      background: showCreateRoom ? 'transparent' : 'linear-gradient(135deg, var(--brand) 0%, var(--pink) 100%)',
+                      boxShadow: showCreateRoom ? 'none' : '0 2px 8px rgba(230, 57, 70, 0.2)'
                     }}
                     onClick={() => {
                       bridge.haptic('light');
@@ -2335,10 +2313,12 @@ export default function App() {
                     {showCreateRoom ? 'Hủy' : '+ Lập Kèo'}
                   </button>
                 </div>
+              </div>
 
-                {/* Create Room Form */}
-                {showCreateRoom && (
-                  <form onSubmit={handleCreateRoomSubmit} className="form-slide-down" style={{ marginTop: 20, borderTop: '1px solid var(--hairline)', paddingTop: 16 }}>
+              {/* Create Room Form Card */}
+              {showCreateRoom && (
+                <section className="mushy-card premium-glow-card form-slide-down" style={{ marginBottom: 16, padding: '16px 20px' }}>
+                  <form onSubmit={handleCreateRoomSubmit}>
                     <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
                       <div style={{ flex: 1 }}>
                         <label className="mushy-label" style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginLeft: '6px', marginBottom: '5px', minHeight: '28px' }}>Danh mục chính</label>
@@ -2813,8 +2793,8 @@ export default function App() {
                       {submittingRoom ? <span className="mushy-spinner" /> : 'Xác nhận tạo phòng & Gửi lời mời 🚀'}
                     </button>
                   </form>
-                )}
-              </section>
+                </section>
+              )}
 
               {/* Rooms list */}
               {(() => {
@@ -3210,10 +3190,15 @@ export default function App() {
           {/* TAB 3: INBOX - HỘP THƯ LỜI MỜI NHẬN ĐƯỢC */}
           {activeTab === 'inbox' && (
             <div className="tab-pane animated-fade-in">
-              <section className="mushy-card" style={{ marginBottom: 16 }}>
-                <h3 className="mushy-section-title" style={{ margin: 0 }}>📥 Hộp thư lời mời Connect</h3>
-                <p className="mushy-section-sub" style={{ margin: '4px 0 0' }}>Lời mời bạn nhận được từ các phòng hẹn Connect của đồng nghiệp</p>
-              </section>
+              <div className="compact-tab-header">
+                <div className="radar-pulse-wrapper" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, width: 24, height: 24 }}>
+                  📥
+                </div>
+                <div className="radar-text-wrapper" style={{ flex: 1 }}>
+                  <h4 className="compact-radar-title" style={{ margin: 0, fontSize: '13.5px', fontWeight: 700 }}>Hộp thư lời mời Connect</h4>
+                  <p className="compact-radar-sub" style={{ margin: '1px 0 0', fontSize: '11px', color: 'var(--muted)' }}>Lời mời bạn nhận được từ các phòng hẹn Connect của đồng nghiệp</p>
+                </div>
+              </div>
 
               {invitations.filter(i => i.receiver_id === ctx.userId).length === 0 ? (
                 <div className="mushy-empty-state animated-fade-in">
@@ -3304,10 +3289,15 @@ export default function App() {
           {/* TAB 4: PROFILE - HỒ SƠ CÁ NHÂN */}
           {activeTab === 'profile' && (
             <div className="tab-pane animated-fade-in">
-              <section className="mushy-card" style={{ marginBottom: 16 }}>
-                <h3 className="mushy-section-title" style={{ margin: 0 }}>⚙️ Hồ sơ Connect</h3>
-                <p className="mushy-section-sub" style={{ margin: '4px 0 0' }}>Điền thông tin và chọn sở thích để radar kết nối hoạt động</p>
-              </section>
+              <div className="compact-tab-header">
+                <div className="radar-pulse-wrapper" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, width: 24, height: 24 }}>
+                  ⚙️
+                </div>
+                <div className="radar-text-wrapper" style={{ flex: 1 }}>
+                  <h4 className="compact-radar-title" style={{ margin: 0, fontSize: '13.5px', fontWeight: 700 }}>Hồ sơ Connect</h4>
+                  <p className="compact-radar-sub" style={{ margin: '1px 0 0', fontSize: '11px', color: 'var(--muted)' }}>Điền thông tin và chọn sở thích để radar kết nối hoạt động</p>
+                </div>
+              </div>
 
               <section className="mushy-card">
                 <div style={{ marginBottom: 12 }}>
