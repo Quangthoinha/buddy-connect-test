@@ -340,6 +340,7 @@ export default function App() {
   const [randomMode, setRandomMode] = useState('mix'); // 'mix' | 'strangers' | 'acquaintances'
   const [guestSearchQuery, setGuestSearchQuery] = useState(''); // text query to search colleagues
   const [submittingRoom, setSubmittingRoom] = useState(false);
+  const [quotaMultiplier, setQuotaMultiplier] = useState(3); // default x3 per empty slot
 
   // Host Withdraw Form state
   const [showCancelModal, setShowCancelModal] = useState(null); // room object
@@ -943,8 +944,8 @@ export default function App() {
   // Derived outbound limit during room creation
   const createRoomAllowedLimit = useMemo(() => {
     const maxParticipants = parseInt(newRoom.max_participants) || 2;
-    return (maxParticipants - 1) * 3;
-  }, [newRoom.max_participants]);
+    return (maxParticipants - 1) * quotaMultiplier;
+  }, [newRoom.max_participants, quotaMultiplier]);
 
   // Partition members into matching-tag and non-matching-tag lists for categorized creation display, supporting search and relationship filters
   const sortedMembersForCreate = useMemo(() => {
@@ -2337,55 +2338,34 @@ export default function App() {
                       />
                     </div>
 
-                    {/* Guest picker to enforce co-creation (PRD Section 4) */}
+                    {/* Quota multiplier stepper */}
+                    <div style={{ marginBottom: 12 }}>
+                      <label className="mushy-label" style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginLeft: '6px', marginBottom: '5px', minHeight: '28px' }}>Hạn ngạch lời mời chờ tối đa</label>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', background: 'rgba(15,15,18,0.02)', border: '1.5px solid var(--hairline)', borderRadius: 14, minHeight: 44 }}>
+                        <button type="button" onClick={() => setQuotaMultiplier(v => Math.max(1, v - 1))} style={{ width: 30, height: 30, borderRadius: '50%', border: '1.5px solid var(--hairline)', background: '#fff', fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>−</button>
+                        <div style={{ flex: 1, textAlign: 'center' }}>
+                          <span style={{ fontSize: 18, fontWeight: 800, color: 'var(--brand)' }}>{createRoomAllowedLimit}</span>
+                          <span style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 4 }}>lời mời</span>
+                          <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 1 }}>{parseInt(newRoom.max_participants)||2} người × {quotaMultiplier} lần/slot = {createRoomAllowedLimit}</div>
+                        </div>
+                        <button type="button" onClick={() => setQuotaMultiplier(v => Math.min(10, v + 1))} style={{ width: 30, height: 30, borderRadius: '50%', border: '1.5px solid var(--hairline)', background: '#fff', fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>+</button>
+                      </div>
+                    </div>
                     <div style={{ marginBottom: 16 }}>
                       <label className="mushy-label" style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 6, marginLeft: '6px', marginBottom: 10 }}>
                         <span style={{ color: 'var(--brand)' }}>⚠️</span> Gửi lời mời đầu tiên (Chọn ít nhất 1 người)
                       </label>
                       {members.length > 0 && (
-                        <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-                          <button
-                            type="button"
-                            className="mushy-btn"
-                            disabled={matchingTagMembers.length === 0}
-                            onClick={() => handleSelectRandomGuests('same_tag', createRoomAllowedLimit)}
-                            style={{
-                              flex: 1,
-                              minHeight: 34,
-                              fontSize: 11.5,
-                              padding: '4px 10px',
-                              background: matchingTagMembers.length === 0 ? 'rgba(15,15,18,0.02)' : 'rgba(230, 57, 70, 0.07)',
-                              borderColor: matchingTagMembers.length === 0 ? 'var(--hairline)' : 'rgba(230, 57, 70, 0.25)',
-                              color: matchingTagMembers.length === 0 ? 'var(--muted)' : 'var(--brand)',
-                              fontWeight: 700,
-                              borderRadius: 10,
-                              opacity: matchingTagMembers.length === 0 ? 0.6 : 1,
-                              cursor: matchingTagMembers.length === 0 ? 'not-allowed' : 'pointer'
-                            }}
-                          >
-                            🎲 Trùng tag ({matchingTagMembers.length})
-                          </button>
-                          <button
-                            type="button"
-                            className="mushy-btn"
-                            onClick={() => handleSelectRandomGuests('any', Math.min(3, createRoomAllowedLimit))}
-                            style={{
-                              flex: 1,
-                              minHeight: 34,
-                              fontSize: 11.5,
-                              padding: '4px 10px',
-                              background: 'rgba(6, 182, 212, 0.07)',
-                              borderColor: 'rgba(6, 182, 212, 0.25)',
-                              color: '#06B6D4',
-                              fontWeight: 700,
-                              borderRadius: 10,
-                              cursor: 'pointer'
-                            }}
-                          >
-                            🎲 Ghép bạn mới
-                          </button>
-                        </div>
+                        <button
+                          type="button"
+                          className="mushy-btn mushy-btn--ghost"
+                          onClick={() => handleSelectRandomGuests('any', Math.min(3, createRoomAllowedLimit))}
+                          style={{ width: '100%', minHeight: 36, fontSize: 12, marginBottom: 12, borderRadius: 10, color: 'var(--muted)', borderColor: 'var(--hairline)' }}
+                        >
+                          🎲 Ghép ngẫu nhiên 3 người
+                        </button>
                       )}
+
                       {/* ── Suggestion rows ── */}
                       {(() => {
                         // Build acquaintances list from interaction history, filtered by selected tag
@@ -2403,7 +2383,7 @@ export default function App() {
                             <div style={{ marginBottom: 14 }}>
                               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, paddingLeft: 4 }}>
                                 <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)' }}>
-                                  {emoji} {label} ({list.length}) <span style={{ fontWeight: 400, fontSize: 10, color: 'var(--muted)', opacity: 0.7 }}>· giữ ảnh để xem chi tiết</span>
+                                  {emoji} {label} ({list.length})
                                 </span>
                                 <button
                                   type="button"
