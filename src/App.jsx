@@ -2386,156 +2386,100 @@ export default function App() {
                           </button>
                         </div>
                       )}
+                      {/* ── Suggestion rows ── */}
+                      {(() => {
+                        // Build acquaintances list from interaction history, filtered by selected tag
+                        const acquaintanceMembers = members.filter(m => {
+                          if (m.user_id === ctx.userId) return false;
+                          return interactionHistory.some(h =>
+                            (h.user_id_1 === ctx.userId && h.user_id_2 === m.user_id) ||
+                            (h.user_id_1 === m.user_id && h.user_id_2 === ctx.userId)
+                          );
+                        }).slice(0, 8);
 
-                      {/* Horizontal Scrolling Avatar Chips for matching-tag members */}
-                      {matchingTagMembers.length > 0 && (
-                        <div style={{ marginBottom: 14 }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, paddingLeft: 6 }}>
-                            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)' }}>
-                              🔥 Gợi ý trùng sở thích ({matchingTagMembers.length}):
-                            </span>
-                            <button
-                              type="button"
-                              style={{
-                                background: 'none',
-                                border: 'none',
-                                color: 'var(--brand)',
-                                fontSize: 11,
-                                fontWeight: 'bold',
-                                cursor: 'pointer',
-                                padding: 0
-                              }}
-                              onClick={handleSelectAllMatchingTagMembers}
-                            >
-                              ✨ Chọn tất cả
-                            </button>
-                          </div>
-                          
-                          <div 
-                            style={{ 
-                              display: 'flex', 
-                              gap: 12, 
-                              overflowX: 'auto', 
-                              padding: '6px 2px 10px', 
-                              scrollbarWidth: 'none',
-                              msOverflowStyle: 'none'
-                            }}
-                          >
-                            {matchingTagMembers.map(m => {
-                              const isSelected = invitedGuests.includes(m.user_id);
-                              const profile = allProfiles[m.user_id];
-                              let _pressTimer = null;
-
-                              const startPress = () => {
-                                _pressTimer = setTimeout(() => {
-                                  bridge.haptic('medium');
-                                  setAvatarTooltip({ member: m, profile });
-                                  _pressTimer = null;
-                                }, 500);
-                              };
-                              const cancelPress = () => {
-                                if (_pressTimer) { clearTimeout(_pressTimer); _pressTimer = null; }
-                              };
-
-                              return (
-                                <div
-                                  key={m.user_id}
-                                  onMouseDown={startPress}
-                                  onMouseUp={cancelPress}
-                                  onMouseLeave={cancelPress}
-                                  onTouchStart={startPress}
-                                  onTouchEnd={cancelPress}
-                                  onTouchCancel={cancelPress}
+                        const renderChipRow = (list, label, emoji) => {
+                          if (list.length === 0) return null;
+                          return (
+                            <div style={{ marginBottom: 14 }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, paddingLeft: 4 }}>
+                                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)' }}>
+                                  {emoji} {label} ({list.length}) <span style={{ fontWeight: 400, fontSize: 10, color: 'var(--muted)', opacity: 0.7 }}>· giữ ảnh để xem chi tiết</span>
+                                </span>
+                                <button
+                                  type="button"
+                                  style={{ background: 'none', border: 'none', color: 'var(--brand)', fontSize: 11, fontWeight: 'bold', cursor: 'pointer', padding: 0 }}
                                   onClick={() => {
-                                    cancelPress();
-                                    if (avatarTooltip) return;
                                     bridge.haptic('light');
-                                    if (isSelected) {
-                                      setInvitedGuests(prev => prev.filter(id => id !== m.user_id));
-                                    } else {
-                                      if (invitedGuests.length >= createRoomAllowedLimit) {
-                                        dialog.error('Hạn ngạch đầy!', `Chỉ có thể mời tối đa ${createRoomAllowedLimit} người cho phòng này.`);
-                                        return;
-                                      }
-                                      setInvitedGuests(prev => [...prev, m.user_id]);
-                                    }
-                                  }}
-                                  style={{
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    alignItems: 'center',
-                                    gap: 6,
-                                    minWidth: 70,
-                                    cursor: 'pointer',
-                                    position: 'relative',
-                                    userSelect: 'none'
+                                    const toAdd = list.map(m => m.user_id).filter(id => !invitedGuests.includes(id));
+                                    const available = createRoomAllowedLimit - invitedGuests.length;
+                                    if (available <= 0) { dialog.error('Hạn ngạch đầy!', `Chỉ có thể mời tối đa ${createRoomAllowedLimit} người.`); return; }
+                                    setInvitedGuests(prev => [...prev, ...toAdd.slice(0, available)]);
                                   }}
                                 >
-                                  {/* Avatar circle */}
-                                  <div
-                                    style={{
-                                      width: 48,
-                                      height: 48,
-                                      borderRadius: '50%',
-                                      background: isSelected ? 'linear-gradient(135deg, var(--brand) 0%, var(--pink) 100%)' : getAvatarGradient(m.full_name?.charAt(0)),
-                                      border: isSelected ? '2.5px solid var(--brand)' : '1.5px solid rgba(255, 255, 255, 0.4)',
-                                      boxShadow: isSelected ? '0 0 10px rgba(230, 57, 70, 0.35)' : '0 4px 8px rgba(15, 15, 18, 0.04)',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      justifyContent: 'center',
-                                      fontSize: 16,
-                                      fontWeight: 700,
-                                      color: '#fff',
-                                      transition: 'all 200ms ease',
-                                      position: 'relative'
-                                    }}
-                                  >
-                                    <span>{m.full_name?.charAt(0)}</span>
-                                    {isSelected && (
-                                      <div
-                                        style={{
-                                          position: 'absolute',
-                                          bottom: -2,
-                                          right: -2,
-                                          width: 18,
-                                          height: 18,
-                                          borderRadius: '50%',
-                                          background: '#4CAF50',
-                                          color: '#fff',
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          justifyContent: 'center',
-                                          fontSize: 10,
-                                          fontWeight: 'bold',
-                                          border: '1.5px solid #fff'
-                                        }}
-                                      >
-                                        ✓
+                                  ✨ Chọn tất cả
+                                </button>
+                              </div>
+                              <div style={{ display: 'flex', gap: 12, overflowX: 'auto', padding: '4px 2px 8px', scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                                {list.map(m => {
+                                  const isSelected = invitedGuests.includes(m.user_id);
+                                  const profile = allProfiles[m.user_id];
+                                  let _pt = null;
+                                  const startPress = () => { _pt = setTimeout(() => { bridge.haptic('medium'); setAvatarTooltip({ member: m, profile }); _pt = null; }, 500); };
+                                  const cancelPress = () => { if (_pt) { clearTimeout(_pt); _pt = null; } };
+                                  return (
+                                    <div
+                                      key={m.user_id}
+                                      onMouseDown={startPress} onMouseUp={cancelPress} onMouseLeave={cancelPress}
+                                      onTouchStart={startPress} onTouchEnd={cancelPress} onTouchCancel={cancelPress}
+                                      onClick={() => {
+                                        cancelPress();
+                                        if (avatarTooltip) return;
+                                        bridge.haptic('light');
+                                        if (isSelected) {
+                                          setInvitedGuests(prev => prev.filter(id => id !== m.user_id));
+                                        } else {
+                                          if (invitedGuests.length >= createRoomAllowedLimit) {
+                                            dialog.error('Hạn ngạch đầy!', `Chỉ có thể mời tối đa ${createRoomAllowedLimit} người.`);
+                                            return;
+                                          }
+                                          setInvitedGuests(prev => [...prev, m.user_id]);
+                                        }
+                                      }}
+                                      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, minWidth: 64, cursor: 'pointer', position: 'relative', userSelect: 'none' }}
+                                    >
+                                      <div style={{
+                                        width: 46, height: 46, borderRadius: '50%',
+                                        background: isSelected ? 'linear-gradient(135deg, var(--brand) 0%, var(--pink) 100%)' : getAvatarGradient(m.full_name?.charAt(0)),
+                                        border: isSelected ? '2.5px solid var(--brand)' : '1.5px solid rgba(255,255,255,0.4)',
+                                        boxShadow: isSelected ? '0 0 10px rgba(230,57,70,0.35)' : '0 3px 8px rgba(15,15,18,0.06)',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        fontSize: 15, fontWeight: 700, color: '#fff',
+                                        transition: 'all 180ms ease', position: 'relative'
+                                      }}>
+                                        <span>{m.full_name?.charAt(0)}</span>
+                                        {isSelected && (
+                                          <div style={{ position: 'absolute', bottom: -2, right: -2, width: 16, height: 16, borderRadius: '50%', background: '#4CAF50', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 'bold', border: '1.5px solid #fff' }}>✓</div>
+                                        )}
                                       </div>
-                                    )}
-                                  </div>
-                                  
-                                  {/* Name (truncated — hold avatar to see full detail) */}
-                                  <span
-                                    style={{
-                                      fontSize: 10.5,
-                                      fontWeight: isSelected ? 700 : 500,
-                                      color: isSelected ? 'var(--brand)' : 'var(--ink)',
-                                      textAlign: 'center',
-                                      maxWidth: 72,
-                                      overflow: 'hidden',
-                                      textOverflow: 'ellipsis',
-                                      whiteSpace: 'nowrap'
-                                    }}
-                                  >
-                                    {m.full_name}
-                                  </span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
+                                      <span style={{ fontSize: 10, fontWeight: isSelected ? 700 : 500, color: isSelected ? 'var(--brand)' : 'var(--ink)', textAlign: 'center', maxWidth: 64, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                        {m.full_name}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        };
+
+                        return (
+                          <>
+                            {renderChipRow(acquaintanceMembers, 'Đã từng kết nối', '🤝')}
+                            {renderChipRow(matchingTagMembers, 'Trùng sở thích', '🔥')}
+                          </>
+                        );
+                      })()}
+
 
                       {/* Selected Guests Summary Chips */}
                       {invitedGuests.length > 0 && (
