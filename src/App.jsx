@@ -1038,6 +1038,13 @@ export default function App() {
 
   const handleSelectRandomGuests = (type, count) => {
     bridge.haptic('light');
+
+    // Check remaining available slots
+    const available = createRoomAllowedLimit - invitedGuests.length;
+    if (available <= 0) {
+      return dialog.info('Hạn ngạch đã đầy', `Bạn đã chọn đủ số lượng lời mời tối đa cho phép (${createRoomAllowedLimit} người).`);
+    }
+
     let pool = [];
 
     // 1. Initial filter based on tag preference
@@ -1049,6 +1056,9 @@ export default function App() {
     } else {
       pool = members;
     }
+
+    // Exclude guests who are already invited/selected
+    pool = pool.filter(m => !invitedGuests.includes(m.user_id));
 
     // 2. Secondary filter based on relationship profile history (stranger vs acquaintance)
     pool = pool.filter(m => {
@@ -1065,19 +1075,24 @@ export default function App() {
     if (pool.length === 0) {
       let modeName = randomMode === 'acquaintances' ? 'người quen' : 'người lạ';
       if (randomMode === 'mix') modeName = 'thành viên';
-      return dialog.info('Không tìm thấy', `Không tìm thấy đồng nghiệp nào trong nhóm "${modeName}" để chọn.`);
+      return dialog.info('Không tìm thấy', `Không tìm thấy đồng nghiệp nào chưa được chọn trong nhóm "${modeName}" để ghép.`);
     }
 
     // 3. Shuffle pool and apply limits
     const shuffled = [...pool].sort(() => 0.5 - Math.random());
-    const limit = Math.min(shuffled.length, count, createRoomAllowedLimit);
+    const limit = Math.min(shuffled.length, count, available);
+    if (limit === 0) {
+      let modeName = randomMode === 'acquaintances' ? 'người quen' : 'người lạ';
+      if (randomMode === 'mix') modeName = 'thành viên';
+      return dialog.info('Không tìm thấy', `Không tìm thấy đồng nghiệp nào chưa được chọn trong nhóm "${modeName}" để ghép thêm.`);
+    }
     const selected = shuffled.slice(0, limit);
 
-    setInvitedGuests(selected.map(m => m.user_id));
+    setInvitedGuests(prev => [...prev, ...selected.map(m => m.user_id)]);
     const namesStr = selected.map(m => m.full_name).join(', ');
     dialog.success(
       'Đã chọn ngẫu nhiên',
-      `Đã chọn ${selected.length} đồng nghiệp (${randomMode === 'mix' ? 'lạ/quen mix' : randomMode === 'strangers' ? 'chỉ người lạ' : 'chỉ người quen'}) vào danh sách mời:\n\n${namesStr}`
+      `Đã chọn thêm ${selected.length} đồng nghiệp (${randomMode === 'mix' ? 'lạ/quen mix' : randomMode === 'strangers' ? 'chỉ người lạ' : 'chỉ người quen'}) vào danh sách mời:\n\n${namesStr}`
     );
   };
 
