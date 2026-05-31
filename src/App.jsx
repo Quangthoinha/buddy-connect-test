@@ -2374,10 +2374,10 @@ export default function App() {
                         <button
                           type="button"
                           className="mushy-btn mushy-btn--ghost"
-                          onClick={() => handleSelectRandomGuests('any', Math.min(3, createRoomAllowedLimit))}
+                          onClick={() => handleSelectRandomGuests('any', Math.max(0, createRoomAllowedLimit - invitedGuests.length))}
                           style={{ width: '100%', minHeight: 36, fontSize: 12, marginBottom: 12, borderRadius: 10, color: 'var(--muted)', borderColor: 'var(--hairline)' }}
                         >
-                          🎲 Ghép ngẫu nhiên 3 người
+                          🎲 Ghép ngẫu nhiên lấp đầy hạn ngạch (tối đa {Math.max(0, createRoomAllowedLimit - invitedGuests.length)} người)
                         </button>
                       )}
 
