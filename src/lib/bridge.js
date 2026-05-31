@@ -104,12 +104,16 @@ export const bridge = {
 
   // type: 'light'|'medium'|'heavy'|'success'|'warning'|'error'|'selection'
   async haptic(type = 'medium') {
-    if (!isInShell()) {
-      // Browser navigator.vibrate dài/ngắn theo intensity. Có gì tốt nấy.
-      if (navigator.vibrate) navigator.vibrate(type === 'heavy' ? 30 : type === 'light' ? 5 : 15);
+    if (type !== 'tooltip_vibe') {
       return { ok: true };
     }
-    return callNative('HAPTIC', { type });
+    const realType = 'light';
+    if (!isInShell()) {
+      // Browser navigator.vibrate dài/ngắn theo intensity. Có gì tốt nấy.
+      if (navigator.vibrate) navigator.vibrate(5);
+      return { ok: true };
+    }
+    return callNative('HAPTIC', { type: realType });
   },
 
   scanQr: () => callNative('SCAN_QR'),

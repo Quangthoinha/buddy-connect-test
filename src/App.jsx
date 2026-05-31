@@ -2452,7 +2452,7 @@ export default function App() {
                                   const isSelected = invitedGuests.includes(m.user_id);
                                   const profile = allProfiles[m.user_id];
                                   let _pt = null;
-                                  const startPress = () => { _pt = setTimeout(() => { bridge.haptic('medium'); setAvatarTooltip({ member: m, profile }); _pt = null; }, 500); };
+                                  const startPress = () => { _pt = setTimeout(() => { bridge.haptic('tooltip_vibe'); setAvatarTooltip({ member: m, profile }); _pt = null; }, 500); };
                                   const cancelPress = () => { if (_pt) { clearTimeout(_pt); _pt = null; } };
                                   return (
                                     <div
