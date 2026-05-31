@@ -361,6 +361,7 @@ export default function App() {
 
   const [activeChatRoom, setActiveChatRoom] = useState(null);
   const [chatInput, setChatInput] = useState('');
+  const [avatarTooltip, setAvatarTooltip] = useState(null); // { member, profile } — shown on long-press
 
   useEffect(() => {
     setRadarPage(1);
@@ -1829,6 +1830,144 @@ export default function App() {
 
   return (
     <div className="mushy-page">
+      {/* Avatar detail tooltip overlay — triggered by long-press on avatar chips */}
+      {avatarTooltip && (
+        <div
+          onClick={() => setAvatarTooltip(null)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 9999,
+            background: 'rgba(15, 15, 18, 0.55)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+            padding: '0 16px 32px'
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: 'var(--surface)',
+              borderRadius: 20,
+              padding: '20px 20px 24px',
+              width: '100%',
+              maxWidth: 420,
+              boxShadow: '0 -4px 40px rgba(15,15,18,0.18)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 14
+            }}
+          >
+            {/* Handle bar */}
+            <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--border)', margin: '0 auto -4px' }} />
+
+            {/* Avatar + name */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <div style={{
+                width: 56, height: 56, borderRadius: '50%', flexShrink: 0,
+                background: getAvatarGradient(avatarTooltip.member.full_name?.charAt(0)),
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 22, fontWeight: 700, color: '#fff',
+                boxShadow: '0 4px 12px rgba(15,15,18,0.15)'
+              }}>
+                {avatarTooltip.member.full_name?.charAt(0)}
+              </div>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--ink)', lineHeight: 1.3 }}>
+                  {avatarTooltip.member.full_name}
+                </div>
+                {avatarTooltip.member.work_phone && (
+                  <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
+                    📞 {avatarTooltip.member.work_phone}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Detail rows */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {avatarTooltip.profile?.department && (
+                <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                  <span style={{ fontSize: 13, minWidth: 20 }}>🏢</span>
+                  <div>
+                    <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Phòng ban</div>
+                    <div style={{ fontSize: 13, color: 'var(--ink)', fontWeight: 500, marginTop: 1 }}>{avatarTooltip.profile.department}</div>
+                  </div>
+                </div>
+              )}
+              {avatarTooltip.profile?.facility && (
+                <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                  <span style={{ fontSize: 13, minWidth: 20 }}>📍</span>
+                  <div>
+                    <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Cơ sở</div>
+                    <div style={{ fontSize: 13, color: 'var(--ink)', fontWeight: 500, marginTop: 1 }}>{avatarTooltip.profile.facility}</div>
+                  </div>
+                </div>
+              )}
+              {avatarTooltip.profile?.available_times?.length > 0 && (
+                <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                  <span style={{ fontSize: 13, minWidth: 20 }}>🕐</span>
+                  <div>
+                    <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Khung giờ rảnh</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+                      {avatarTooltip.profile.available_times.map(t => (
+                        <span key={t} style={{
+                          fontSize: 11, background: 'var(--brand-soft)', color: 'var(--brand)',
+                          borderRadius: 8, padding: '2px 8px', fontWeight: 600
+                        }}>{t}</span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+              {!avatarTooltip.profile && (
+                <div style={{ fontSize: 12, color: 'var(--muted)', textAlign: 'center', padding: '4px 0' }}>
+                  Chưa có hồ sơ chi tiết
+                </div>
+              )}
+            </div>
+
+            {/* Action buttons */}
+            <div style={{ display: 'flex', gap: 10, marginTop: 2 }}>
+              <button
+                type="button"
+                onClick={() => setAvatarTooltip(null)}
+                style={{
+                  flex: 1, padding: '10px 0', borderRadius: 12, border: '1.5px solid var(--border)',
+                  background: 'transparent', color: 'var(--muted)', fontSize: 13, fontWeight: 600, cursor: 'pointer'
+                }}
+              >
+                Đóng
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const id = avatarTooltip.member.user_id;
+                  if (invitedGuests.includes(id)) {
+                    setInvitedGuests(prev => prev.filter(x => x !== id));
+                  } else {
+                    if (invitedGuests.length >= createRoomAllowedLimit) {
+                      dialog.error('Hạn ngạch đầy!', `Chỉ có thể mời tối đa ${createRoomAllowedLimit} người.`);
+                    } else {
+                      bridge.haptic('light');
+                      setInvitedGuests(prev => [...prev, id]);
+                    }
+                  }
+                  setAvatarTooltip(null);
+                }}
+                style={{
+                  flex: 2, padding: '10px 0', borderRadius: 12, border: 'none',
+                  background: invitedGuests.includes(avatarTooltip.member.user_id)
+                    ? 'rgba(230, 57, 70, 0.1)' : 'linear-gradient(135deg, var(--brand) 0%, var(--pink) 100%)',
+                  color: invitedGuests.includes(avatarTooltip.member.user_id) ? 'var(--brand)' : '#fff',
+                  fontSize: 13, fontWeight: 700, cursor: 'pointer'
+                }}
+              >
+                {invitedGuests.includes(avatarTooltip.member.user_id) ? '✕ Bỏ chọn' : '✓ Mời người này'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header section */}
       <header className="app-header">
         <div className="brand-section">
@@ -2284,10 +2423,32 @@ export default function App() {
                           >
                             {matchingTagMembers.map(m => {
                               const isSelected = invitedGuests.includes(m.user_id);
+                              const profile = allProfiles[m.user_id];
+                              let _pressTimer = null;
+
+                              const startPress = () => {
+                                _pressTimer = setTimeout(() => {
+                                  bridge.haptic('medium');
+                                  setAvatarTooltip({ member: m, profile });
+                                  _pressTimer = null;
+                                }, 500);
+                              };
+                              const cancelPress = () => {
+                                if (_pressTimer) { clearTimeout(_pressTimer); _pressTimer = null; }
+                              };
+
                               return (
                                 <div
                                   key={m.user_id}
+                                  onMouseDown={startPress}
+                                  onMouseUp={cancelPress}
+                                  onMouseLeave={cancelPress}
+                                  onTouchStart={startPress}
+                                  onTouchEnd={cancelPress}
+                                  onTouchCancel={cancelPress}
                                   onClick={() => {
+                                    cancelPress();
+                                    if (avatarTooltip) return;
                                     bridge.haptic('light');
                                     if (isSelected) {
                                       setInvitedGuests(prev => prev.filter(id => id !== m.user_id));
@@ -2354,7 +2515,7 @@ export default function App() {
                                     )}
                                   </div>
                                   
-                                  {/* Name */}
+                                  {/* Name (truncated — hold avatar to see full detail) */}
                                   <span
                                     style={{
                                       fontSize: 10.5,
