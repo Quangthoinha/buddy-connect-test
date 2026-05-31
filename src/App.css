@@ -1204,5 +1204,61 @@
   cursor: not-allowed !important;
 }
 
+/* =====================================================================
+   UX Pro Max Enhancements (Numeric Badges & Skeleton loaders) 🌸
+   ===================================================================== */
+
+/* Premium Skeleton Loader */
+.mushy-skeleton {
+  background: linear-gradient(90deg, rgba(15, 15, 18, 0.03) 25%, rgba(15, 15, 18, 0.08) 37%, rgba(15, 15, 18, 0.03) 63%);
+  background-size: 400% 100%;
+  animation: mushy-skeleton-loading 1.4s ease infinite;
+  border-radius: 8px;
+}
+
+@keyframes mushy-skeleton-loading {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* Numeric Inbox Tab Badge */
+.mushy-tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 4.5px;
+  font-size: 9px;
+  font-weight: 850;
+  line-height: 1;
+  color: #fff;
+  background: var(--brand);
+  border-radius: 999px;
+  margin-left: 5px;
+  box-shadow: 0 2px 6px rgba(230, 57, 70, 0.35);
+  position: relative;
+  top: -1.5px;
+  animation: bounce-badge 1s ease infinite alternate;
+}
+
+@keyframes bounce-badge {
+  from { transform: translateY(0); }
+  to { transform: translateY(-2px); }
+}
+
+/* Premium High Match Badge */
+.buddy-match-badge--premium {
+  background: linear-gradient(135deg, #FF6B81 0%, #E63946 100%) !important;
+  color: #fff !important;
+  box-shadow: 0 3px 8px rgba(230, 57, 70, 0.3);
+  animation: pulse-glow-badge 1.5s infinite alternate;
+}
+
+@keyframes pulse-glow-badge {
+  from { transform: scale(1); box-shadow: 0 3px 8px rgba(230, 57, 70, 0.3); }
+  to { transform: scale(1.05); box-shadow: 0 4px 12px rgba(230, 57, 70, 0.55); }
+}
+
 
 

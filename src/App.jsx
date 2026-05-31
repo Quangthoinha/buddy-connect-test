@@ -293,6 +293,58 @@ function getAvatarGradient(char) {
   return gradients[code % gradients.length];
 }
 
+// Premium Skeleton Loader component for smooth visual transition
+function SkeletonScreen() {
+  return (
+    <div className="skeleton-container animated-fade-in" style={{ padding: '0 4px' }}>
+      {/* Skeleton Radar Header */}
+      <div className="compact-radar-header" style={{ borderStyle: 'solid', borderColor: 'rgba(15,15,18,0.04)', background: 'rgba(255,255,255,0.4)', pointerEvents: 'none', marginBottom: 14 }}>
+        <div className="mushy-skeleton" style={{ width: 14, height: 14, borderRadius: '50%', flexShrink: 0 }} />
+        <div style={{ flex: 1 }}>
+          <div className="mushy-skeleton" style={{ width: '40%', height: 14, marginBottom: 6 }} />
+          <div className="mushy-skeleton" style={{ width: '60%', height: 10 }} />
+        </div>
+      </div>
+
+      {/* Skeleton Search */}
+      <div className="mushy-skeleton" style={{ width: '100%', height: 44, borderRadius: 12, marginBottom: 14 }} />
+
+      {/* Card Skeletons */}
+      {[1, 2, 3].map((i) => (
+        <div key={i} className="buddy-card-compact" style={{ opacity: 1 - i * 0.18, borderStyle: 'solid', borderColor: 'rgba(15,15,18,0.03)', pointerEvents: 'none', marginBottom: 12 }}>
+          <div className="buddy-card-main">
+            {/* Circle avatar */}
+            <div className="mushy-skeleton" style={{ width: 42, height: 42, borderRadius: '50%', flexShrink: 0 }} />
+            <div className="buddy-body-compact" style={{ flex: 1 }}>
+              <div className="buddy-header-row" style={{ marginBottom: 6 }}>
+                {/* Name */}
+                <div className="mushy-skeleton" style={{ width: '35%', height: 14 }} />
+                {/* Match percentage badge */}
+                <div className="mushy-skeleton" style={{ width: 45, height: 16, borderRadius: 999 }} />
+              </div>
+              {/* Department & Facility */}
+              <div className="mushy-skeleton" style={{ width: '55%', height: 10, marginBottom: 10 }} />
+              {/* Available time */}
+              <div className="mushy-skeleton" style={{ width: '70%', height: 10, marginBottom: 8 }} />
+              {/* Tags */}
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <div className="mushy-skeleton" style={{ width: 50, height: 16, borderRadius: 999 }} />
+                <div className="mushy-skeleton" style={{ width: 65, height: 16, borderRadius: 999 }} />
+                <div className="mushy-skeleton" style={{ width: 40, height: 16, borderRadius: 999 }} />
+              </div>
+            </div>
+          </div>
+          {/* Bottom buttons */}
+          <div className="buddy-actions-compact" style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid rgba(15,15,18,0.04)', marginTop: 12, paddingTop: 10 }}>
+            <div className="mushy-skeleton" style={{ width: 30, height: 30, borderRadius: '50%' }} />
+            <div className="mushy-skeleton" style={{ width: 90, height: 30, borderRadius: 999 }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function App() {
   const dialog = useDialog();
   const ctx = useMemo(() => getContext(), []);
@@ -2044,9 +2096,10 @@ export default function App() {
           onClick={() => setActiveTab('inbox')}
         >
           <span>📥</span> Lời Mời
-          {invitations.filter(i => i.receiver_id === ctx.userId && i.status === 'pending').length > 0 && (
-            <span className="notification-dot" style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: 'var(--brand)', marginLeft: 2 }} />
-          )}
+          {(() => {
+            const count = invitations.filter(i => i.receiver_id === ctx.userId && i.status === 'pending').length;
+            return count > 0 ? <span className="mushy-tab-badge">{count}</span> : null;
+          })()}
         </button>
         <button
           className={`nav-tab-btn ${activeTab === 'profile' ? 'nav-tab-btn--active' : ''}`}
@@ -2057,9 +2110,7 @@ export default function App() {
       </nav>
 
       {loading ? (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: '60px 0' }}>
-          <span className="mushy-spinner" style={{ width: 32, height: 32, color: 'var(--brand)' }} />
-        </div>
+        <SkeletonScreen />
       ) : (
         <>
           {/* TAB 1: RADAR */}
@@ -2175,7 +2226,9 @@ export default function App() {
                               <div className="buddy-body-compact">
                                 <div className="buddy-header-row">
                                   <h4 className="buddy-name-compact">{member.full_name}</h4>
-                                  <span className="buddy-match-badge">{matchScore}% Match</span>
+                                  <span className={`buddy-match-badge ${matchScore >= 80 ? 'buddy-match-badge--premium' : ''}`}>
+                                    {matchScore >= 80 ? '✨ ' : ''}{matchScore}% Match
+                                  </span>
                                 </div>
                                 
                                 <div className="buddy-meta-row">
