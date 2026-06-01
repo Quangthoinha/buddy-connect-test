@@ -3427,16 +3427,31 @@ export default function App() {
                             flexDirection: 'column',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            gap: '4px',
+                            gap: '6px',
                             zIndex: 1,
-                            borderRadius: 'var(--r-card)',
+                            borderRadius: '0', // Straight edge to fill the parent container perfectly, parent clips it!
                             cursor: 'pointer',
                             boxShadow: 'inset 4px 0 10px rgba(0,0,0,0.12)'
                           }}
                           onClick={() => handleDeleteInvitation(inv.id)}
                         >
-                          <span style={{ fontSize: '18px' }}>🗑️</span>
-                          <span style={{ color: '#fff', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Xóa</span>
+                          <div
+                            style={{
+                              width: '38px',
+                              height: '38px',
+                              borderRadius: '50%',
+                              background: 'rgba(255, 255, 255, 0.22)', // Translucent glassmorphism circle
+                              backdropFilter: 'blur(4px)',
+                              WebkitBackdropFilter: 'blur(4px)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              boxShadow: '0 2px 8px rgba(0,0,0,0.08)'
+                            }}
+                          >
+                            <span style={{ fontSize: '18px' }}>🗑️</span>
+                          </div>
+                          <span style={{ color: '#fff', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.8px' }}>Xóa</span>
                         </div>
 
                         {/* Invitation Card */}
