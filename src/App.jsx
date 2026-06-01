@@ -384,6 +384,7 @@ export default function App() {
   const swipeStartX = useRef(0);
   const swipeStartY = useRef(0);
   const isSwiping = useRef(false);
+  const hasTriggeredSwipeHaptic = useRef(false);
 
   // Room Co-creation Form State
   const [showCreateRoom, setShowCreateRoom] = useState(false);
@@ -1837,6 +1838,74 @@ export default function App() {
     }
   };
 
+  const handleLoadMockInvitations = async () => {
+    try {
+      bridge.haptic('medium');
+      const activeWs = scope.workspaceId;
+      if (!activeWs) return;
+
+      // 1. Create a mock room first to ensure we have a valid room_id
+      const mockRooms = [
+        {
+          workspace_id: activeWs,
+          host_id: members[0]?.user_id || 'mock-host-1',
+          child_code: 'badminton',
+          location: 'Sân Cầu Lông Bộ Công An',
+          scheduled_at: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
+          max_participants: 4,
+          status: 'open',
+          version: 1
+        },
+        {
+          workspace_id: activeWs,
+          host_id: members[1]?.user_id || 'mock-host-2',
+          child_code: 'coffee',
+          location: 'Cà phê Cộng - Triệu Việt Vương',
+          scheduled_at: new Date(Date.now() + 48 * 3600 * 1000).toISOString(),
+          max_participants: 2,
+          status: 'filling',
+          version: 1
+        },
+        {
+          workspace_id: activeWs,
+          host_id: members[2]?.user_id || 'mock-host-3',
+          child_code: 'football',
+          location: 'Sân bóng đá Đại Học Y',
+          scheduled_at: new Date(Date.now() - 2 * 3600 * 1000).toISOString(), // expired (2 hours ago)
+          max_participants: 10,
+          status: 'expired',
+          version: 1
+        }
+      ];
+
+      // Insert mock rooms
+      const { data: dbRooms, error: roomErr } = await db
+        .from('rooms')
+        .insert(mockRooms.slice(0, Math.min(mockRooms.length, members.length || 3)))
+        .select();
+
+      if (roomErr || !dbRooms) throw roomErr || new Error('Không thể tạo phòng mock.');
+
+      // 2. Create mock invitations pointing to these rooms
+      const mockInvs = dbRooms.map((room, idx) => ({
+        workspace_id: activeWs,
+        room_id: room.id,
+        receiver_id: ctx.userId,
+        status: 'pending',
+        created_at: new Date(Date.now() - idx * 3600 * 1000).toISOString() // staggered times
+      }));
+
+      const { error: invErr } = await db.from('invitations').insert(mockInvs);
+      if (invErr) throw invErr;
+
+      await loadData();
+      dialog.success('Đã tải Mock Data!', `Đã tạo ${dbRooms.length} lời mời Connect mẫu từ đồng nghiệp để bạn trải nghiệm tính năng vuốt xóa.`);
+    } catch (e) {
+      console.error(e);
+      dialog.error('Lỗi nạp Mock Data', e.message);
+    }
+  };
+
   // Pure 60FPS GPU-accelerated touch handlers for buttery smooth mobile swiping (no React re-renders)
   const handleTouchStart = (e) => {
     // Smoothly close any other swiped cards in the DOM first for premium native feel
@@ -1848,6 +1917,11 @@ export default function App() {
         if (card) {
           card.style.transition = 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)';
           card.style.transform = 'translate3d(0px, 0, 0)';
+          const dbg = container.querySelector('.swipe-delete-bg');
+          if (dbg) {
+            dbg.style.transition = 'width 0.3s cubic-bezier(0.16, 1, 0.3, 1)';
+            dbg.style.width = '80px';
+          }
         }
       }
     });
@@ -1855,6 +1929,7 @@ export default function App() {
     swipeStartX.current = e.touches[0].clientX;
     swipeStartY.current = e.touches[0].clientY;
     isSwiping.current = true;
+    hasTriggeredSwipeHaptic.current = false;
   };
 
   const handleTouchMove = (e, invId) => {
@@ -1871,25 +1946,53 @@ export default function App() {
     }
 
     const cardEl = e.currentTarget;
-    const isCurrentlySwiped = cardEl.parentElement.classList.contains('is-swiped');
+    const containerEl = cardEl.parentElement;
+    const deleteBg = containerEl.querySelector('.swipe-delete-bg');
+    const isCurrentlySwiped = containerEl.classList.contains('is-swiped');
     
     let translateX = 0;
     if (isCurrentlySwiped) {
       // Swiping right closes the swiped card
       translateX = -80 - diffX;
       if (translateX > 0) translateX = 0;
-      if (translateX < -120) translateX = -120; // elastic swipe limit
     } else {
       // Swiping left reveals the delete button
       if (diffX > 0) {
         translateX = -diffX;
-        if (translateX < -120) translateX = -120; // elastic swipe limit
       }
     }
 
     // Direct GPU-accelerated translate3d to bypass React render tree completely (60FPS)
     cardEl.style.transition = 'none';
     cardEl.style.transform = `translate3d(${translateX}px, 0, 0)`;
+
+    // Butter smooth elastic stretching: expand background button width as user swipes
+    const currentDisplacement = Math.abs(translateX);
+    if (deleteBg) {
+      deleteBg.style.transition = 'none';
+      deleteBg.style.width = `${Math.max(80, currentDisplacement)}px`;
+
+      // Scale the glassmorphic bubble inside as swipe displacement increases
+      const bubble = deleteBg.querySelector('.trash-bubble') || deleteBg.children[0];
+      if (bubble) {
+        const scaleVal = 1 + Math.min(0.2, (currentDisplacement - 80) / 400);
+        bubble.style.transform = `scale(${scaleVal}) translate3d(0,0,0)`;
+      }
+
+      // Trigger high-fidelity click haptic at 180px threshold to notify user of full-swipe action
+      if (currentDisplacement >= 180) {
+        if (!hasTriggeredSwipeHaptic.current) {
+          bridge.haptic('medium');
+          hasTriggeredSwipeHaptic.current = true;
+        }
+        deleteBg.style.background = deleteBg.getAttribute('data-is-expired') === 'true'
+          ? 'linear-gradient(135deg, #4B5563 0%, #1F2937 100%)' // Extreme Slate Grey
+          : 'linear-gradient(135deg, #DC2626 0%, #991B1B 100%)'; // Extreme Crimson red
+      } else {
+        hasTriggeredSwipeHaptic.current = false;
+        deleteBg.style.background = ''; // revert to default CSS inline style
+      }
+    }
     
     // Prevent default scroll behavior once active horizontal swipe is confirmed
     if (diffX > 15 && e.cancelable) {
@@ -1903,27 +2006,59 @@ export default function App() {
     
     const cardEl = e.currentTarget;
     const containerEl = cardEl.parentElement;
+    const deleteBg = containerEl.querySelector('.swipe-delete-bg');
     const currentX = e.changedTouches[0].clientX;
     const diffX = swipeStartX.current - currentX;
     
     cardEl.style.transition = 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)';
+    if (deleteBg) {
+      deleteBg.style.transition = 'width 0.3s cubic-bezier(0.16, 1, 0.3, 1), background 0.3s ease';
+      
+      const bubble = deleteBg.querySelector('.trash-bubble') || deleteBg.children[0];
+      if (bubble) {
+        bubble.style.transition = 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)';
+        bubble.style.transform = 'scale(1) translate3d(0,0,0)';
+      }
+    }
     
     const isCurrentlySwiped = containerEl.classList.contains('is-swiped');
+    
+    // 1. FULL SWIPE TO DELETE threshold (180px) -> Auto delete with off-screen animation
+    if (diffX > 180) {
+      bridge.haptic('success');
+      cardEl.style.transform = 'translate3d(-100%, 0, 0)';
+      if (deleteBg) {
+        deleteBg.style.width = '100%';
+        deleteBg.style.background = deleteBg.getAttribute('data-is-expired') === 'true'
+          ? 'linear-gradient(135deg, #4B5563 0%, #1F2937 100%)'
+          : 'linear-gradient(135deg, #DC2626 0%, #991B1B 100%)';
+      }
+      setTimeout(() => {
+        handleDeleteInvitation(invId);
+      }, 300);
+      return;
+    }
+
+    // 2. Snap points
     if (isCurrentlySwiped) {
       if (diffX < -25) {
         containerEl.classList.remove('is-swiped');
         cardEl.style.transform = 'translate3d(0px, 0, 0)';
+        if (deleteBg) deleteBg.style.width = '80px';
         bridge.haptic('light');
       } else {
         cardEl.style.transform = 'translate3d(-80px, 0, 0)';
+        if (deleteBg) deleteBg.style.width = '80px';
       }
     } else {
       if (diffX > 40) {
         containerEl.classList.add('is-swiped');
         cardEl.style.transform = 'translate3d(-80px, 0, 0)';
+        if (deleteBg) deleteBg.style.width = '80px';
         bridge.haptic('light');
       } else {
         cardEl.style.transform = 'translate3d(0px, 0, 0)';
+        if (deleteBg) deleteBg.style.width = '80px';
       }
     }
   };
@@ -3413,9 +3548,30 @@ export default function App() {
                 <div className="radar-pulse-wrapper" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, width: 24, height: 24 }}>
                   📥
                 </div>
-                <div className="radar-text-wrapper" style={{ flex: 1 }}>
-                  <h4 className="compact-radar-title" style={{ margin: 0, fontSize: '13.5px', fontWeight: 700 }}>Hộp thư lời mời Connect</h4>
-                  <p className="compact-radar-sub" style={{ margin: '1px 0 0', fontSize: '11px', color: 'var(--muted)' }}>Lời mời bạn nhận được từ các phòng hẹn Connect của đồng nghiệp</p>
+                <div className="radar-text-wrapper" style={{ flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <h4 className="compact-radar-title" style={{ margin: 0, fontSize: '13.5px', fontWeight: 700 }}>Hộp thư lời mời Connect</h4>
+                    <p className="compact-radar-sub" style={{ margin: '1px 0 0', fontSize: '11px', color: 'var(--muted)' }}>Lời mời bạn nhận được từ các phòng hẹn Connect của đồng nghiệp</p>
+                  </div>
+                  <button
+                    onClick={handleLoadMockInvitations}
+                    style={{
+                      background: 'rgba(230, 57, 70, 0.08)',
+                      color: 'var(--brand)',
+                      border: 'none',
+                      padding: '5px 12px',
+                      borderRadius: '12px',
+                      fontSize: '10.5px',
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      boxShadow: '0 2px 6px rgba(230, 57, 70, 0.06)'
+                    }}
+                  >
+                    ⚡ Mock Data
+                  </button>
                 </div>
               </div>
 
@@ -3424,6 +3580,23 @@ export default function App() {
                   <div className="mushy-empty-icon">📥</div>
                   <h4 className="mushy-empty-title">Hộp thư lời mời trống</h4>
                   <p className="mushy-empty-desc">Hiện chưa có lời mời Connect nào gửi tới bạn. Hãy thử đổi sở thích hoặc chủ động lập kèo trước nhé!</p>
+                  <button
+                    className="mushy-btn mushy-btn--ghost"
+                    style={{ 
+                      marginTop: 16, 
+                      minHeight: 34, 
+                      height: 34, 
+                      fontSize: 12, 
+                      padding: '0 16px',
+                      color: 'var(--brand)',
+                      borderColor: 'var(--brand)',
+                      background: 'var(--brand-soft)',
+                      fontWeight: 800
+                    }}
+                    onClick={handleLoadMockInvitations}
+                  >
+                    ⚡ Nạp Mock Data để test Vuốt Xóa
+                  </button>
                 </div>
               ) : (
                 invitations
@@ -3446,6 +3619,7 @@ export default function App() {
                         {/* Premium designed Swipe Delete Background button */}
                         <div
                           className="swipe-delete-bg"
+                          data-is-expired={isExpired}
                           style={{
                             position: 'absolute',
                             right: 0,
