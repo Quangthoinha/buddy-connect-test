@@ -1282,8 +1282,368 @@ div:focus {
   padding-bottom: calc(130px + env(safe-area-inset-bottom, 0px)) !important;
 }
 
+/* =====================================================================
+   Radar — Group Priority Headers
+   ===================================================================== */
+.radar-group-header {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px 4px 6px;
+  margin-top: 4px;
+}
 
+.radar-group-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--ink);
+  letter-spacing: -0.2px;
+}
 
+.radar-group-sub {
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+/* =====================================================================
+   Buddy Card — Explainable reason + Skills
+   ===================================================================== */
+.buddy-reason-text {
+  font-size: 11px;
+  color: var(--muted);
+  margin: 4px 0 2px;
+  line-height: 1.45;
+  font-style: italic;
+}
+
+.buddy-tag-skill {
+  background: rgba(6, 182, 212, 0.07) !important;
+  border-color: rgba(6, 182, 212, 0.2) !important;
+  color: #06B6D4 !important;
+}
+
+/* =====================================================================
+   SKELETON LOADING
+   Pulse shimmer dùng cho mọi placeholder khi chưa có data
+   ===================================================================== */
+@keyframes skeleton-shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+.skeleton {
+  background: linear-gradient(90deg,
+    rgba(15,15,18,0.06) 25%,
+    rgba(15,15,18,0.12) 50%,
+    rgba(15,15,18,0.06) 75%
+  );
+  background-size: 800px 100%;
+  animation: skeleton-shimmer 1.4s ease infinite;
+  border-radius: 8px;
+  display: block;
+}
+
+/* Skeleton Buddy Card */
+.skeleton-buddy-card {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 16px;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.skeleton-buddy-card .sk-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.skeleton-buddy-card .sk-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.skeleton-buddy-card .sk-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.skeleton-buddy-card .sk-name  { height: 14px; width: 55%; border-radius: 7px; }
+.skeleton-buddy-card .sk-meta  { height: 11px; width: 75%; border-radius: 6px; }
+.skeleton-buddy-card .sk-reason{ height: 10px; width: 90%; border-radius: 5px; }
+.skeleton-buddy-card .sk-time  { height: 10px; width: 60%; border-radius: 5px; }
+.skeleton-buddy-card .sk-tags  { display: flex; gap: 6px; margin-top: 2px; }
+.skeleton-buddy-card .sk-tag   { height: 20px; width: 64px; border-radius: 999px; }
+.skeleton-buddy-card .sk-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--hairline);
+  margin-top: 2px;
+}
+.skeleton-buddy-card .sk-btn-main { height: 30px; width: 88px; border-radius: 999px; }
+.skeleton-buddy-card .sk-btn-call { height: 30px; width: 30px; border-radius: 50%; }
+
+/* Skeleton Room Card */
+.skeleton-room-card {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-card);
+  padding: 16px;
+  margin-bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.skeleton-room-card .sk-title  { height: 16px; width: 65%; border-radius: 8px; }
+.skeleton-room-card .sk-host   { height: 12px; width: 40%; border-radius: 6px; }
+.skeleton-room-card .sk-time   { height: 12px; width: 50%; border-radius: 6px; }
+.skeleton-room-card .sk-status { height: 22px; width: 120px; border-radius: 999px; }
+
+/* Skeleton Invitation Card */
+.skeleton-inv-card {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-card);
+  padding: 16px;
+  margin-bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.skeleton-inv-card .sk-header { display: flex; gap: 12px; align-items: center; }
+.skeleton-inv-card .sk-avatar { width: 44px; height: 44px; border-radius: 50%; flex-shrink: 0; }
+.skeleton-inv-card .sk-info   { flex: 1; display: flex; flex-direction: column; gap: 7px; }
+.skeleton-inv-card .sk-name   { height: 13px; width: 60%; border-radius: 7px; }
+.skeleton-inv-card .sk-sub    { height: 11px; width: 80%; border-radius: 5px; }
+.skeleton-inv-card .sk-time   { height: 11px; width: 45%; border-radius: 5px; }
+.skeleton-inv-card .sk-actions {
+  display: flex; gap: 10px; padding-top: 10px; border-top: 1px solid var(--hairline);
+}
+.skeleton-inv-card .sk-btn    { height: 38px; border-radius: 999px; flex: 1; }
+
+/* Skeleton Radar Header */
+.skeleton-radar-header {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 16px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.skeleton-radar-header .sk-dot  { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; }
+.skeleton-radar-header .sk-text { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+.skeleton-radar-header .sk-title{ height: 13px; width: 55%; border-radius: 6px; }
+.skeleton-radar-header .sk-sub  { height: 10px; width: 75%; border-radius: 5px; }
+.skeleton-radar-header .sk-toggle{ height: 28px; width: 80px; border-radius: 999px; flex-shrink: 0; }
+
+/* =====================================================================
+   RESPONSIVE — Mobile-first chuẩn cho WebView 360-430px
+   ===================================================================== */
+
+/* Đảm bảo không có overflow ngang */
+* { box-sizing: border-box; }
+
+html, body {
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Safe area bottom cho các device có home indicator */
+.mushy-page {
+  padding-bottom: max(16px, env(safe-area-inset-bottom));
+}
+
+/* Header co lại tốt trên màn nhỏ */
+@media (max-width: 380px) {
+  .brand-name   { font-size: 17px; }
+  .brand-tagline{ display: none; }
+  .brand-icon   { font-size: 26px; }
+  .nav-tab-btn  { font-size: 12px; padding: 9px 6px; gap: 4px; }
+}
+
+/* Buddy Card name không bị overflow trên màn rất nhỏ */
+.buddy-name-compact {
+  max-width: calc(100% - 80px);
+}
+
+/* Meta row wrap gọn trên màn <360px */
+.buddy-meta-row {
+  flex-wrap: wrap;
+  row-gap: 2px;
+}
+
+/* Compact radar header: ẩn subtitle trên màn quá nhỏ */
+@media (max-width: 360px) {
+  .compact-radar-sub { display: none; }
+}
+
+/* Modal full-width trên mobile */
+.modal-card {
+  width: calc(100% - 24px) !important;
+  max-width: 520px;
+  margin: 12px;
+}
+
+/* Chips container: wrap tốt, không tràn */
+.chips-container {
+  max-width: 100%;
+}
+.selectable-chip {
+  max-width: calc(50% - 4px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Guest selector scroll chiều cao hợp lý hơn */
+.guest-selector-scroll {
+  max-height: min(200px, 35vh);
+}
+
+/* Đảm bảo form datetime-local không tràn */
+input[type="datetime-local"] {
+  width: 100%;
+  max-width: 100%;
+}
+
+/* =====================================================================
+   TAB TRANSITION — fade mượt khi đổi tab
+   ===================================================================== */
+.tab-pane {
+  animation: tab-fade-in 220ms ease both;
+}
+
+@keyframes tab-fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* =====================================================================
+   TOUCH TARGET — tối thiểu 44px cho mọi nút interactive
+   ===================================================================== */
+.mushy-btn,
+.nav-tab-btn,
+.accordion-header,
+.guest-select-item,
+.matching-tag-chip,
+.selectable-chip {
+  min-height: 44px;
+}
+
+/* Exception: compact buttons trong card vẫn nhỏ nhưng padding touch lớn hơn */
+.compact-btn        { min-height: 36px !important; }
+.compact-btn-phone  { min-height: 36px !important; min-width: 36px !important; }
+
+/* Buddy action buttons: fill width tốt hơn trên nhỏ */
+.buddy-actions-compact {
+  flex-wrap: wrap;
+}
+.buddy-actions-compact .compact-btn {
+  flex: 1;
+  max-width: 160px;
+}
+
+/* =====================================================================
+   UX MICRO — Các cải thiện nhỏ khác
+   ===================================================================== */
+
+/* Footer padding để không bị che bởi home indicator */
+.footer {
+  padding-bottom: max(20px, env(safe-area-inset-bottom)) !important;
+}
+
+/* Buddy card hover chỉ trên desktop (tránh flicker trên touch) */
+@media (hover: none) {
+  .buddy-card-compact:hover,
+  .activity-card:hover,
+  .buddy-card:hover {
+    transform: none;
+    box-shadow: 0 4px 15px rgba(15,15,18,0.02);
+  }
+}
+
+/* Scrollbar mỏng cho các scroll container */
+.guest-selector-scroll::-webkit-scrollbar,
+.modal-card::-webkit-scrollbar {
+  width: 3px;
+}
+.guest-selector-scroll::-webkit-scrollbar-track,
+.modal-card::-webkit-scrollbar-track {
+  background: transparent;
+}
+.guest-selector-scroll::-webkit-scrollbar-thumb,
+.modal-card::-webkit-scrollbar-thumb {
+  background: var(--hairline);
+  border-radius: 99px;
+}
+
+/* Accordion content: không vỡ chip trên màn nhỏ */
+.accordion-content .chips-container {
+  gap: 6px;
+}
+.accordion-content .selectable-chip {
+  font-size: 12px;
+  padding: 6px 12px;
+}
+
+/* Input focus ring rõ hơn */
+.mushy-input:focus {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px rgba(230,57,70,0.10);
+}
+
+/* Section header group: line trái thay vì chỉ text */
+.radar-group-header {
+  position: relative;
+  padding-left: 12px;
+}
+.radar-group-header::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 18px;
+  bottom: 8px;
+  width: 3px;
+  background: linear-gradient(180deg, var(--brand), transparent);
+  border-radius: 2px;
+}
+
+/* Icebreaker message box: animation xuất hiện */
+@keyframes icebreaker-appear {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.icebreaker-msg-box {
+  animation: icebreaker-appear 250ms ease both;
+}
+
+/* Reason text: không italic quá đậm, màu nhẹ hơn */
+.buddy-reason-text {
+  font-style: normal;
+  color: rgba(15,15,18,0.45);
+  font-size: 11.5px;
+}
+
+/* Tab badge dot: rõ hơn */
+.notification-dot {
+  width: 7px !important;
+  height: 7px !important;
+  box-shadow: 0 0 0 1.5px var(--surface);
+}
 
 
 

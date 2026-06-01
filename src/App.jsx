@@ -366,6 +366,8 @@ export default function App() {
     available_times: [],
   });
   const [myTags, setMyTags] = useState([]); // Selected child_codes
+  const [mySkills, setMySkills] = useState([]); // Selected skills
+  const [myGoals, setMyGoals] = useState([]); // Selected career goals
 
   const [members, setMembers] = useState([]); // Workspace members
   const [allProfiles, setAllProfiles] = useState({}); // user_id -> profile
@@ -440,6 +442,11 @@ export default function App() {
   const [generatedCode, setGeneratedCode] = useState(null);
   const [loadingGrants, setLoadingGrants] = useState(false);
 
+  // AI features
+  const [serverMatchReasons, setServerMatchReasons] = useState({}); // user_id -> string[]
+  const [icebreakerMsg, setIcebreakerMsg] = useState('');
+  const [loadingIcebreaker, setLoadingIcebreaker] = useState(false);
+
   // 1. Fetch all data on mount and scope changes
   useEffect(() => {
     if (scope?.workspaceId) {
@@ -466,6 +473,11 @@ export default function App() {
       unsubInvs();
     };
   }, [scope?.workspaceId]);
+
+  // Reset icebreaker message khi đổi người mời
+  useEffect(() => {
+    setIcebreakerMsg('');
+  }, [quickInviteData]);
 
   // Load complete state from DB
   async function loadData(silent = false) {
@@ -530,6 +542,8 @@ export default function App() {
           facility: prof.facility || '',
           available_times: prof.available_times || [],
         });
+        setMySkills(prof.skills || []);
+        setMyGoals(prof.career_goals || []);
         setHasProfile(true);
 
         // Fetch my user_tags
@@ -582,6 +596,9 @@ export default function App() {
       // 5. Load Rooms & Invitations
       await loadRoomsData();
       await loadInvitationsData();
+
+      // 6. Load server-side match reasons (non-blocking)
+      loadServerMatchReasons();
 
     } catch (err) {
       console.error('Lỗi tải dữ liệu Connect:', err);
@@ -735,6 +752,8 @@ export default function App() {
         department: myProfile.department.trim(),
         facility: myProfile.facility.trim(),
         available_times: myProfile.available_times,
+        skills: mySkills,
+        career_goals: myGoals,
         updated_at: new Date().toISOString()
       });
       if (profErr) throw profErr;
@@ -950,6 +969,7 @@ export default function App() {
           profile,
           tags,
           exactMatches: matchedChildObjects,
+          sharedParents,
           priority,
           isFallback,
           fallbackParentLabel,
@@ -2065,6 +2085,105 @@ export default function App() {
     return tag ? tag.name : code;
   };
 
+  // Xây câu lý do kết nối explainable cho Buddy Card
+  const buildMatchReason = (member, profile, exactMatches, sharedParents, hasInteracted) => {
+    const parts = [];
+
+    if (exactMatches.length > 0) {
+      parts.push(`đều thích ${exactMatches[0].name}`);
+    } else if (sharedParents.length > 0) {
+      const parentObj = TAXONOMY.find(p => p.parent_code === sharedParents[0]);
+      if (parentObj) parts.push(`đều quan tâm nhóm ${parentObj.parent_name}`);
+    }
+
+    // Skills trùng
+    const mySkillSet = new Set(mySkills);
+    const commonSkills = (profile.skills || []).filter(s => mySkillSet.has(s));
+    if (commonSkills.length > 0 && parts.length === 0) {
+      parts.push(`đều có kỹ năng ${commonSkills[0]}`);
+    }
+
+    // Goals trùng
+    const myGoalSet = new Set(myGoals);
+    const commonGoals = (profile.career_goals || []).filter(g => myGoalSet.has(g));
+    if (commonGoals.length > 0 && parts.length === 0) {
+      parts.push(`đều hướng tới "${commonGoals[0]}"`);
+    }
+
+    if (!hasInteracted && parts.length > 0) parts.push('chưa từng tương tác');
+    if (profile.facility && profile.facility === myProfile.facility) {
+      parts.push(`cùng cơ sở ${myProfile.facility}`);
+    }
+
+    if (parts.length === 0) return null;
+    return `Bạn và ${member.full_name} ${parts.join(' và ')}.`;
+  };
+
+  // Gọi server-side matching để lấy match_reasons bổ sung
+  const loadServerMatchReasons = async () => {
+    try {
+      const res = await fetch('/api/match', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${ctx.token}`,
+          'X-Workspace-Id': scope.workspaceId,
+          'X-Home-Workspace-Id': ctx.workspaceId,
+        },
+        body: JSON.stringify({ userId: ctx.userId, workspaceId: scope.workspaceId }),
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      const reasonMap = {};
+      (Array.isArray(data) ? data : []).forEach(d => {
+        if (d.user_id && d.match_reasons) reasonMap[d.user_id] = d.match_reasons;
+      });
+      setServerMatchReasons(reasonMap);
+    } catch (e) {
+      console.warn('[match-api] unavailable, using client-side reasons');
+    }
+  };
+
+  // Gọi AI Icebreaker — gợi ý câu mở đầu khi rủ nhanh
+  const handleGetIcebreaker = async () => {
+    if (!quickInviteData) return;
+    const toProfile = allProfiles[quickInviteData.member.user_id] || {};
+    setLoadingIcebreaker(true);
+    try {
+      const res = await fetch('/api/icebreaker', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${ctx.token}`,
+          'X-Workspace-Id': scope.workspaceId,
+          'X-Home-Workspace-Id': ctx.workspaceId,
+        },
+        body: JSON.stringify({
+          fromUser: {
+            full_name: members.find(m => m.user_id === ctx.userId)?.full_name || 'Tôi',
+            tags: myTags,
+            career_goals: myGoals,
+          },
+          toUser: {
+            full_name: quickInviteData.member.full_name,
+            tags: allUserTags[quickInviteData.member.user_id] || [],
+            career_goals: toProfile.career_goals || [],
+          },
+        }),
+      });
+      if (res.status === 429) {
+        return dialog.error('Hết quota AI', 'Bạn đã dùng hết 10 lần gợi ý AI hôm nay. Hãy thử lại vào ngày mai!');
+      }
+      const data = await res.json();
+      if (data.message) setIcebreakerMsg(data.message);
+    } catch (e) {
+      console.warn('[icebreaker] failed:', e);
+      setIcebreakerMsg(`Chào ${quickInviteData.member.full_name}, mình thấy chúng ta có vài điểm chung và muốn kết nối! Bạn có rảnh không?`);
+    } finally {
+      setLoadingIcebreaker(false);
+    }
+  };
+
   if (ctx.isMissingContext) {
     return (
       <div style={{
@@ -2388,6 +2507,13 @@ export default function App() {
                     )}
                   </div>
 
+                  {/* Count badge */}
+                  {rankedCandidates.length > 0 && (
+                    <p style={{ fontSize: 11.5, color: 'var(--muted)', marginBottom: 10, textAlign: 'right' }}>
+                      Tìm thấy <strong>{rankedCandidates.length}</strong> đồng nghiệp phù hợp
+                    </p>
+                  )}
+
                   {rankedCandidates.length === 0 ? (
                     <div className="mushy-empty-state animated-fade-in">
                       <div className="mushy-empty-icon">🛰️</div>
@@ -2399,9 +2525,9 @@ export default function App() {
                     const paginatedCandidates = rankedCandidates.slice((radarPage - 1) * RADAR_PAGE_SIZE, radarPage * RADAR_PAGE_SIZE);
                     return (
                       <>
-                        {paginatedCandidates.map(({ member, profile, tags, exactMatches, priority, isFallback, fallbackParentLabel, matchScore, hasInteracted }) => (
-                          <section 
-                            key={member.user_id} 
+                        {paginatedCandidates.map(({ member, profile, tags, exactMatches, sharedParents, priority, isFallback, fallbackParentLabel, matchScore, hasInteracted }) => (
+                          <section
+                            key={member.user_id}
                             className="buddy-card-compact"
                             style={{ cursor: 'pointer' }}
                             onClick={() => {
@@ -2439,6 +2565,14 @@ export default function App() {
                                   <span className="buddy-facility">{profile.facility || 'Cơ sở'}</span>
                                 </div>
 
+                                {/* Explainable reason */}
+                                {(() => {
+                                  const serverReasons = serverMatchReasons[member.user_id];
+                                  const clientReason = buildMatchReason(member, profile, exactMatches, sharedParents || [], hasInteracted);
+                                  const displayReason = serverReasons?.length > 0 ? serverReasons.join(' · ') : clientReason;
+                                  return displayReason ? <p className="buddy-reason-text">💡 {displayReason}</p> : null;
+                                })()}
+
                                 <p className="buddy-time-text">
                                   🕒 Rảnh: {profile.available_times?.join(', ') || 'Chưa cập nhật'}
                                 </p>
@@ -2457,8 +2591,8 @@ export default function App() {
 
                                   {/* Clean matching tag chips */}
                                   {exactMatches.slice(0, 3).map(tag => (
-                                    <span 
-                                      key={tag.code} 
+                                    <span
+                                      key={tag.code}
                                       className="buddy-tag-compact"
                                       style={{ cursor: 'pointer' }}
                                       onClick={(e) => {
@@ -2473,6 +2607,22 @@ export default function App() {
                                     </span>
                                   ))}
                                 </div>
+
+                                {/* Skills của người kia */}
+                                {profile.skills?.length > 0 && (
+                                  <div className="buddy-labels-row" style={{ marginTop: 4 }}>
+                                    {profile.skills.slice(0, 3).map(s => (
+                                      <span key={s} className="buddy-tag-compact buddy-tag-skill">🛠 {s}</span>
+                                    ))}
+                                  </div>
+                                )}
+
+                                {/* Goals của người kia */}
+                                {profile.career_goals?.length > 0 && (
+                                  <p className="buddy-time-text" style={{ color: '#A855F7' }}>
+                                    🎯 {profile.career_goals.slice(0, 2).join(' · ')}
+                                  </p>
+                                )}
                               </div>
                             </div>
                           </section>
@@ -3764,19 +3914,46 @@ export default function App() {
                   ))}
                 </div>
               </div>
+
+              {/* AI Icebreaker */}
+              <div style={{ marginBottom: 14 }}>
+                <button
+                  type="button"
+                  className="mushy-btn mushy-btn--ghost mushy-btn--block"
+                  disabled={loadingIcebreaker}
+                  onClick={handleGetIcebreaker}
+                  style={{ fontSize: 12.5, minHeight: 38 }}
+                >
+                  {loadingIcebreaker
+                    ? <><span className="mushy-spinner" style={{ width: 14, height: 14, marginRight: 6 }} /> Đang nghĩ câu mở đầu...</>
+                    : '🤖 Gợi ý câu mở đầu bằng AI'}
+                </button>
+                {icebreakerMsg && (
+                  <div className="icebreaker-msg-box" style={{ marginTop: 8, padding: '10px 14px', background: 'rgba(168,85,247,0.04)', border: '1px solid rgba(168,85,247,0.15)', borderRadius: 12, fontSize: 12.5, color: 'var(--ink)', lineHeight: 1.6 }}>
+                    "{icebreakerMsg}"
+                    <button
+                      type="button"
+                      style={{ display: 'block', marginTop: 6, fontSize: 11, background: 'none', border: 'none', color: 'var(--brand)', cursor: 'pointer', padding: 0, fontWeight: 600 }}
+                      onClick={() => { bridge.copyText(icebreakerMsg); dialog.success('Đã copy!', 'Câu mở đầu đã được sao chép vào clipboard.'); }}
+                    >
+                      📋 Copy câu này
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="form-actions" style={{ borderTop: '1px solid var(--hairline)', paddingTop: 10, marginTop: 10, paddingBottom: 0 }}>
-              <button 
-                type="button" 
-                className="mushy-btn mushy-btn--ghost" 
+              <button
+                type="button"
+                className="mushy-btn mushy-btn--ghost"
                 style={{ height: 34, fontSize: 12.5 }}
                 onClick={() => setQuickInviteData(null)}
               >
                 Hủy
               </button>
-              <button 
-                type="button" 
+              <button
+                type="button"
                 className="mushy-btn mushy-btn--primary btn-glow-brand" 
                 style={{ height: 34, fontSize: 12.5 }}
                 disabled={submittingQuickInvite || !quickInviteTime}
@@ -3853,6 +4030,54 @@ export default function App() {
                         }}
                       >
                         ⏰ {time}
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* SKILLS */}
+              <div style={{ borderTop: '1px solid var(--hairline)', paddingTop: 18, marginTop: 18 }}>
+                <label className="mushy-label">Kỹ năng chuyên môn (Skills)</label>
+                <p style={{ fontSize: 11.5, color: 'var(--muted)', margin: '2px 0 8px' }}>Chọn các kỹ năng bạn có — dùng để match với người cùng chuyên môn</p>
+                <div className="chips-container">
+                  {['JavaScript', 'Python', 'React', 'Node.js', 'Project Management', 'Design', 'Marketing', 'Sales', 'Data Analysis', 'Public Speaking'].map(skill => {
+                    const isSelected = mySkills.includes(skill);
+                    return (
+                      <span
+                        key={skill}
+                        className={`selectable-chip ${isSelected ? 'selectable-chip--selected' : ''}`}
+                        style={isSelected ? {} : { background: 'rgba(6,182,212,0.06)', borderColor: 'rgba(6,182,212,0.2)', color: '#06B6D4' }}
+                        onClick={() => {
+                          bridge.haptic('light');
+                          setMySkills(prev => isSelected ? prev.filter(s => s !== skill) : [...prev, skill]);
+                        }}
+                      >
+                        🛠 {skill}
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* CAREER GOALS */}
+              <div style={{ borderTop: '1px solid var(--hairline)', paddingTop: 18, marginTop: 18 }}>
+                <label className="mushy-label">Mục tiêu nghề nghiệp (Career Goals)</label>
+                <p style={{ fontSize: 11.5, color: 'var(--muted)', margin: '2px 0 8px' }}>Chọn mục tiêu bạn đang hướng tới — giúp kết nối với người cùng chí hướng</p>
+                <div className="chips-container">
+                  {['Tìm mentor', 'Trở thành mentor', 'Học công nghệ mới', 'Mở rộng network', 'Luyện kỹ năng mềm', 'Chuyển hướng nghề nghiệp'].map(goal => {
+                    const isSelected = myGoals.includes(goal);
+                    return (
+                      <span
+                        key={goal}
+                        className={`selectable-chip ${isSelected ? 'selectable-chip--selected' : ''}`}
+                        style={isSelected ? {} : { background: 'rgba(168,85,247,0.06)', borderColor: 'rgba(168,85,247,0.2)', color: '#A855F7' }}
+                        onClick={() => {
+                          bridge.haptic('light');
+                          setMyGoals(prev => isSelected ? prev.filter(g => g !== goal) : [...prev, goal]);
+                        }}
+                      >
+                        🎯 {goal}
                       </span>
                     );
                   })}
