@@ -1334,12 +1334,23 @@ export default function App() {
 
         // Auto withdraw from the clashing old room
         if (clash.host_id === ctx.userId) {
+          // Optimistic local state update: cancel the old room
+          setRooms(prev => prev.map(r => r.id === clash.id ? { ...r, status: 'cancelled' } : r));
+
           // If you are the Host of the old room, you must cancel it
           await db
             .from('rooms')
             .update({ status: 'cancelled', cancel_reason: 'Host chuyển sang kèo khác', updated_at: new Date().toISOString() })
             .eq('id', clash.id);
         } else {
+          // Count remaining guests to calculate new status for the old room
+          const remainingGuests = invitations.filter(i => i.room_id === clash.id && i.status === 'accepted' && i.receiver_id !== ctx.userId).length;
+          const nextClashRoomStatus = remainingGuests === 0 ? 'open' : 'filling';
+
+          // Optimistic local state update: old invitation -> declined, old room status -> open/filling
+          setInvitations(prev => prev.map(i => (i.room_id === clash.id && i.receiver_id === ctx.userId && i.status === 'accepted') ? { ...i, status: 'declined', updated_at: new Date().toISOString() } : i));
+          setRooms(prev => prev.map(r => r.id === clash.id ? { ...r, status: nextClashRoomStatus } : r));
+
           // If you are a Guest in the old room, change old invitation to declined
           await db
             .from('invitations')
@@ -1347,6 +1358,17 @@ export default function App() {
             .eq('room_id', clash.id)
             .eq('receiver_id', ctx.userId)
             .eq('status', 'accepted');
+
+          // Update the old room's status in DB
+          await db
+            .from('rooms')
+            .update({ status: nextClashRoomStatus, updated_at: new Date().toISOString() })
+            .eq('id', clash.id);
+
+          // Update native chat group with new participant list (if any guests remain)
+          if (nextClashRoomStatus === 'filling') {
+            await createRoomNativeChat(clash.id, clash.location);
+          }
         }
       }
 
@@ -1678,6 +1700,48 @@ export default function App() {
     } catch (e) {
       dialog.error('Lỗi từ chối', e.message);
       loadData(); // Fallback to full reload if failed
+    }
+  };
+
+  const handleLeaveRoom = async (room) => {
+    try {
+      bridge.haptic('medium');
+      const ok = await dialog.confirm(
+        'Rút lui khỏi phòng hẹn?',
+        `Bạn có chắc chắn muốn rút lui khỏi phòng hẹn "${getTagName(room.child_code)} tại ${room.location}" không?`,
+        { danger: true, confirmLabel: 'Rút lui', cancelLabel: 'Quay lại' }
+      );
+      if (!ok) return;
+
+      // 1. Optimistic UI updates
+      setInvitations(prev => prev.map(i => (i.room_id === room.id && i.receiver_id === ctx.userId && i.status === 'accepted') ? { ...i, status: 'declined', updated_at: new Date().toISOString() } : i));
+
+      const remainingGuests = invitations.filter(i => i.room_id === room.id && i.status === 'accepted' && i.receiver_id !== ctx.userId).length;
+      const nextRoomStatus = remainingGuests === 0 ? 'open' : 'filling';
+      setRooms(prev => prev.map(r => r.id === room.id ? { ...r, status: nextRoomStatus } : r));
+
+      // 2. DB Sync
+      await db
+        .from('invitations')
+        .update({ status: 'declined', updated_at: new Date().toISOString() })
+        .eq('room_id', room.id)
+        .eq('receiver_id', ctx.userId)
+        .eq('status', 'accepted');
+
+      await db
+        .from('rooms')
+        .update({ status: nextRoomStatus, updated_at: new Date().toISOString() })
+        .eq('id', room.id);
+
+      if (nextRoomStatus === 'filling') {
+        await createRoomNativeChat(room.id, room.location);
+      }
+
+      bridge.haptic('success');
+      await loadData(true); // Silent background refresh!
+    } catch (e) {
+      dialog.error('Lỗi rút lui', e.message);
+      loadData();
     }
   };
 
@@ -3578,6 +3642,19 @@ export default function App() {
                               🚨 Hủy phòng hẹn văn minh
                             </button>
                           </div>
+                        </div>
+                      )}
+
+                      {/* Guest Action: Out kèo / Rút khỏi phòng */}
+                      {!isHost && (room.status === 'open' || room.status === 'filling' || room.status === 'matched') && (
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12, borderTop: '1px solid var(--hairline)', paddingTop: 12 }}>
+                          <button
+                            className="mushy-btn mushy-btn--ghost"
+                            style={{ color: 'var(--danger)', borderColor: 'var(--danger)', minHeight: 36, fontSize: 12, padding: '4px 12px' }}
+                            onClick={() => handleLeaveRoom(room)}
+                          >
+                            🚪 Out kèo / Rút khỏi phòng
+                          </button>
                         </div>
                       )}
                     </div>
