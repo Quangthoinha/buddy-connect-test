@@ -385,6 +385,8 @@ export default function App() {
   const swipeStartY = useRef(0);
   const isSwiping = useRef(false);
   const hasTriggeredSwipeHaptic = useRef(false);
+  const swipeDirection = useRef(null); // null | 'horizontal' | 'vertical'
+
 
   // Room Co-creation Form State
   const [showCreateRoom, setShowCreateRoom] = useState(false);
@@ -1937,7 +1939,10 @@ export default function App() {
         const card = container.querySelector('.invitation-card');
         if (card) {
           card.style.transition = 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)';
-          card.style.transform = '';
+          card.style.transform = 'translate3d(0px, 0, 0)';
+          setTimeout(() => {
+            card.style.transform = '';
+          }, 300);
           const dbg = container.querySelector('.swipe-delete-bg');
           if (dbg) {
             dbg.style.transition = 'width 0.3s cubic-bezier(0.16, 1, 0.3, 1)';
@@ -1950,6 +1955,7 @@ export default function App() {
     swipeStartX.current = e.touches[0].clientX;
     swipeStartY.current = e.touches[0].clientY;
     isSwiping.current = true;
+    swipeDirection.current = null; // Reset gesture lock on tap
     hasTriggeredSwipeHaptic.current = false;
   };
 
@@ -1960,8 +1966,25 @@ export default function App() {
     const diffX = swipeStartX.current - currentX;
     const diffY = swipeStartY.current - currentY;
 
-    // Ignore if scrolling vertically to allow native page scroll
-    if (Math.abs(diffY) > Math.abs(diffX)) {
+    // 1. Gesture Direction Lock: lock main swipe axis at 8px movement
+    if (!swipeDirection.current) {
+      const absX = Math.abs(diffX);
+      const absY = Math.abs(diffY);
+      if (absX > 8 || absY > 8) {
+        if (absX > absY) {
+          swipeDirection.current = 'horizontal';
+        } else {
+          swipeDirection.current = 'vertical';
+          isSwiping.current = false;
+          return;
+        }
+      } else {
+        return; // wait for enough movement to lock
+      }
+    }
+
+    // 2. Cancel and skip if vertical scroll lock is established
+    if (swipeDirection.current === 'vertical') {
       isSwiping.current = false;
       return;
     }
@@ -2015,8 +2038,8 @@ export default function App() {
       }
     }
     
-    // Prevent default scroll behavior once active horizontal swipe is confirmed
-    if (diffX > 15 && e.cancelable) {
+    // Prevent default browser scroll once actively horizontal swiping
+    if (swipeDirection.current === 'horizontal' && e.cancelable) {
       e.preventDefault();
     }
   };
@@ -2060,26 +2083,48 @@ export default function App() {
       return;
     }
 
-    // 2. Snap points
+    // 2. Snap points and Tap-to-Close mechanics
     if (isCurrentlySwiped) {
-      if (diffX < -25) {
+      // Swipe right or simple tap/minimal horizontal drag (diffX < 15): Snap shut!
+      if (diffX < 15) {
         containerEl.classList.remove('is-swiped');
-        cardEl.style.transform = '';
+        cardEl.style.transform = 'translate3d(0px, 0, 0)';
         if (deleteBg) deleteBg.style.width = '80px';
+        setTimeout(() => {
+          cardEl.style.transform = '';
+        }, 300);
         bridge.haptic('light');
+        
+        // Prevent click/tap propagation to underlying buttons (Click Hijacking prevention)
+        if (Math.abs(diffX) < 5) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
       } else {
-        cardEl.style.transform = '';
+        // Remain swiped open
+        cardEl.style.transform = 'translate3d(-80px, 0, 0)';
         if (deleteBg) deleteBg.style.width = '80px';
+        setTimeout(() => {
+          cardEl.style.transform = '';
+        }, 300);
       }
     } else {
       if (diffX > 40) {
+        // Reveal swipe actions
         containerEl.classList.add('is-swiped');
-        cardEl.style.transform = '';
+        cardEl.style.transform = 'translate3d(-80px, 0, 0)';
         if (deleteBg) deleteBg.style.width = '80px';
+        setTimeout(() => {
+          cardEl.style.transform = '';
+        }, 300);
         bridge.haptic('light');
       } else {
-        cardEl.style.transform = '';
+        // Return to closed state
+        cardEl.style.transform = 'translate3d(0px, 0, 0)';
         if (deleteBg) deleteBg.style.width = '80px';
+        setTimeout(() => {
+          cardEl.style.transform = '';
+        }, 300);
       }
     }
   };
