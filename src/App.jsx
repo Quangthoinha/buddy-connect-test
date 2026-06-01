@@ -468,8 +468,8 @@ export default function App() {
   }, [scope?.workspaceId]);
 
   // Load complete state from DB
-  async function loadData() {
-    setLoading(true);
+  async function loadData(silent = false) {
+    if (!silent) setLoading(true);
     try {
       const activeWs = scope.workspaceId;
       if (!activeWs) return;
@@ -1382,8 +1382,15 @@ export default function App() {
           .eq('id', room.id);
       }
 
+      // Optimistic updates
+      setInvitations(prev => prev.map(i => i.id === inv.id ? { ...i, status: 'accepted' } : i));
+      if (room) {
+        const nextStatus = (invitations.filter(i => i.room_id === room.id && i.status === 'accepted').length + 2 >= room.max_participants) ? 'matched' : 'filling';
+        setRooms(prev => prev.map(r => r.id === room.id ? { ...r, status: nextStatus } : r));
+      }
+
       bridge.haptic('success');
-      await loadData();
+      await loadData(true); // Silent background refresh!
 
       // Optimistically redirect to the 'rooms' tab and trigger a premium highlight glow
       setHighlightedRoomId(room.id);
@@ -1508,7 +1515,7 @@ export default function App() {
     setReconnectingRoomId(room.id);
     try {
       await createRoomNativeChat(room.id, room.location);
-      await loadData();
+      await loadData(true); // Silent background refresh!
       dialog.success('Kết nối thành công!', 'Nhóm chat chéo của phòng hẹn đã được kết nối lại thành công.');
     } catch (err) {
       console.error('Lỗi khi kết nối lại nhóm chat:', err);
@@ -1603,8 +1610,12 @@ export default function App() {
       }
 
       setShowCancelModal(null);
+      // Optimistic update
+      setRooms(prev => prev.map(r => r.id === room.id ? { ...r, status: 'cancelled' } : r));
+      setInvitations(prev => prev.map(i => i.room_id === room.id ? { ...i, status: 'declined' } : i));
+
       await dialog.success('Đã hủy phòng hẹn', 'Hệ thống đã đóng phòng và gửi thông báo văn minh đến các thành viên.');
-      loadData();
+      await loadData(true); // Silent background refresh!
     } catch (e) {
       dialog.error('Lỗi hủy phòng', e.message);
     }
@@ -1614,6 +1625,8 @@ export default function App() {
     try {
       bridge.haptic('light');
       
+      // Optimistic UI updates
+      setInvitations(prev => prev.map(i => i.id === inv.id ? { ...i, status: 'declined' } : i));
 
       await db
         .from('invitations')
@@ -1625,6 +1638,7 @@ export default function App() {
       if (room && room.status === 'filling') {
         const remainingGuests = invitations.filter(i => i.room_id === room.id && i.status === 'accepted' && i.id !== inv.id).length;
         if (remainingGuests === 0) {
+          setRooms(prev => prev.map(r => r.id === room.id ? { ...r, status: 'open' } : r));
           await db
             .from('rooms')
             .update({ status: 'open', updated_at: new Date().toISOString() })
@@ -1632,9 +1646,10 @@ export default function App() {
         }
       }
 
-      loadData();
+      await loadData(true); // Silent background refresh!
     } catch (e) {
       dialog.error('Lỗi từ chối', e.message);
+      loadData(); // Fallback to full reload if failed
     }
   };
 
@@ -1665,7 +1680,7 @@ export default function App() {
         status: 'pending'
       });
 
-      loadData();
+      await loadData(true); // Silent background refresh!
     } catch (e) {
       dialog.error('Lỗi mời thêm', e.message);
     }
@@ -1813,10 +1828,14 @@ export default function App() {
   const handleRevokeInvitation = async (invId) => {
     try {
       bridge.haptic('light');
+      // Optimistic update
+      setInvitations(prev => prev.filter(i => i.id !== invId));
+
       await db.from('invitations').delete().eq('id', invId);
-      loadData();
+      await loadData(true); // Silent background refresh!
     } catch (e) {
       dialog.error('Lỗi thu hồi', e.message);
+      loadData(); // Fallback on failure
     }
   };
 
