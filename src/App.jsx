@@ -3471,7 +3471,7 @@ export default function App() {
                 </div>
               </div>
 
-              {invitations.filter(i => i.receiver_id === ctx.userId).length === 0 ? (
+              {invitations.filter(i => i.receiver_id === ctx.userId && i.status !== 'accepted').length === 0 ? (
                 <div className="mushy-empty-state animated-fade-in">
                   <div className="mushy-empty-icon">📥</div>
                   <h4 className="mushy-empty-title">Hộp thư lời mời trống</h4>
@@ -3496,7 +3496,7 @@ export default function App() {
                 </div>
               ) : (
                 invitations
-                  .filter(i => i.receiver_id === ctx.userId)
+                  .filter(i => i.receiver_id === ctx.userId && i.status !== 'accepted')
                   .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
                   .map(inv => {
                     const room = rooms.find(r => r.id === inv.room_id);
