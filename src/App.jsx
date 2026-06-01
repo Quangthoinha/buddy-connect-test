@@ -1406,7 +1406,14 @@ export default function App() {
       const room = rooms.find(r => r.id === roomId);
       if (!room) return;
 
-      const accGuests = invitations.filter(i => i.room_id === roomId && i.status === 'accepted').map(i => i.receiver_id);
+      // Fetch latest accepted participants directly from DB to prevent React async state lag
+      const { data: dbInvs } = await db
+        .from('invitations')
+        .select('receiver_id')
+        .eq('room_id', roomId)
+        .eq('status', 'accepted');
+
+      const accGuests = dbInvs ? dbInvs.map(i => i.receiver_id) : [];
       const participantIds = [room.host_id, ...accGuests];
 
       // Call Native Shell Bridge
