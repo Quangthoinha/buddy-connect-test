@@ -1929,205 +1929,7 @@ export default function App() {
     }
   };
 
-  // Pure 60FPS GPU-accelerated touch handlers for buttery smooth mobile swiping (no React re-renders)
-  const handleTouchStart = (e) => {
-    // Smoothly close any other swiped cards in the DOM first for premium native feel
-    const swipedContainers = document.querySelectorAll('.swipe-delete-container.is-swiped');
-    swipedContainers.forEach(container => {
-      if (container !== e.currentTarget.parentElement) {
-        container.classList.remove('is-swiped');
-        const card = container.querySelector('.invitation-card');
-        if (card) {
-          card.style.transition = 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)';
-          card.style.transform = 'translate3d(0px, 0, 0)';
-          setTimeout(() => {
-            card.style.transform = '';
-          }, 300);
-          const dbg = container.querySelector('.swipe-delete-bg');
-          if (dbg) {
-            dbg.style.transition = 'width 0.3s cubic-bezier(0.16, 1, 0.3, 1)';
-            dbg.style.width = '80px';
-          }
-        }
-      }
-    });
-
-    swipeStartX.current = e.touches[0].clientX;
-    swipeStartY.current = e.touches[0].clientY;
-    isSwiping.current = true;
-    swipeDirection.current = null; // Reset gesture lock on tap
-    hasTriggeredSwipeHaptic.current = false;
-  };
-
-  const handleTouchMove = (e, invId) => {
-    if (!isSwiping.current) return;
-    const currentX = e.touches[0].clientX;
-    const currentY = e.touches[0].clientY;
-    const diffX = swipeStartX.current - currentX;
-    const diffY = swipeStartY.current - currentY;
-
-    // 1. Gesture Direction Lock: lock main swipe axis at 8px movement
-    if (!swipeDirection.current) {
-      const absX = Math.abs(diffX);
-      const absY = Math.abs(diffY);
-      if (absX > 8 || absY > 8) {
-        if (absX > absY) {
-          swipeDirection.current = 'horizontal';
-        } else {
-          swipeDirection.current = 'vertical';
-          isSwiping.current = false;
-          return;
-        }
-      } else {
-        return; // wait for enough movement to lock
-      }
-    }
-
-    // 2. Cancel and skip if vertical scroll lock is established
-    if (swipeDirection.current === 'vertical') {
-      isSwiping.current = false;
-      return;
-    }
-
-    const cardEl = e.currentTarget;
-    const containerEl = cardEl.parentElement;
-    const deleteBg = containerEl.querySelector('.swipe-delete-bg');
-    const isCurrentlySwiped = containerEl.classList.contains('is-swiped');
-    
-    let translateX = 0;
-    if (isCurrentlySwiped) {
-      // Swiping right closes the swiped card
-      translateX = -80 - diffX;
-      if (translateX > 0) translateX = 0;
-    } else {
-      // Swiping left reveals the delete button
-      if (diffX > 0) {
-        translateX = -diffX;
-      }
-    }
-
-    // Direct GPU-accelerated translate3d to bypass React render tree completely (60FPS)
-    cardEl.style.transition = 'none';
-    cardEl.style.transform = `translate3d(${translateX}px, 0, 0)`;
-
-    // Butter smooth elastic stretching: expand background button width as user swipes
-    const currentDisplacement = Math.abs(translateX);
-    if (deleteBg) {
-      deleteBg.style.transition = 'none';
-      deleteBg.style.width = `${Math.max(80, currentDisplacement)}px`;
-
-      // Scale the glassmorphic bubble inside as swipe displacement increases
-      const bubble = deleteBg.querySelector('.trash-bubble') || deleteBg.children[0];
-      if (bubble) {
-        const scaleVal = 1 + Math.min(0.2, (currentDisplacement - 80) / 400);
-        bubble.style.transform = `scale(${scaleVal}) translate3d(0,0,0)`;
-      }
-
-      // Trigger high-fidelity click haptic at 180px threshold to notify user of full-swipe action
-      if (currentDisplacement >= 180) {
-        if (!hasTriggeredSwipeHaptic.current) {
-          bridge.haptic('medium');
-          hasTriggeredSwipeHaptic.current = true;
-        }
-        deleteBg.style.background = deleteBg.getAttribute('data-is-expired') === 'true'
-          ? 'linear-gradient(135deg, #4B5563 0%, #1F2937 100%)' // Extreme Slate Grey
-          : 'linear-gradient(135deg, #DC2626 0%, #991B1B 100%)'; // Extreme Crimson red
-      } else {
-        hasTriggeredSwipeHaptic.current = false;
-        deleteBg.style.background = ''; // revert to default CSS inline style
-      }
-    }
-    
-    // Prevent default browser scroll once actively horizontal swiping
-    if (swipeDirection.current === 'horizontal' && e.cancelable) {
-      e.preventDefault();
-    }
-  };
-
-  const handleTouchEnd = (e, invId) => {
-    if (!isSwiping.current) return;
-    isSwiping.current = false;
-    
-    const cardEl = e.currentTarget;
-    const containerEl = cardEl.parentElement;
-    const deleteBg = containerEl.querySelector('.swipe-delete-bg');
-    const currentX = e.changedTouches[0].clientX;
-    const diffX = swipeStartX.current - currentX;
-    
-    cardEl.style.transition = 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)';
-    if (deleteBg) {
-      deleteBg.style.transition = 'width 0.3s cubic-bezier(0.16, 1, 0.3, 1), background 0.3s ease';
-      
-      const bubble = deleteBg.querySelector('.trash-bubble') || deleteBg.children[0];
-      if (bubble) {
-        bubble.style.transition = 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)';
-        bubble.style.transform = 'scale(1) translate3d(0,0,0)';
-      }
-    }
-    
-    const isCurrentlySwiped = containerEl.classList.contains('is-swiped');
-    
-    // 1. FULL SWIPE TO DELETE threshold (180px) -> Auto delete with off-screen animation
-    if (diffX > 180) {
-      bridge.haptic('success');
-      cardEl.style.transform = 'translate3d(-100%, 0, 0)';
-      if (deleteBg) {
-        deleteBg.style.width = '100%';
-        deleteBg.style.background = deleteBg.getAttribute('data-is-expired') === 'true'
-          ? 'linear-gradient(135deg, #4B5563 0%, #1F2937 100%)'
-          : 'linear-gradient(135deg, #DC2626 0%, #991B1B 100%)';
-      }
-      setTimeout(() => {
-        handleDeleteInvitation(invId);
-      }, 300);
-      return;
-    }
-
-    // 2. Snap points and Tap-to-Close mechanics
-    if (isCurrentlySwiped) {
-      // Swipe right or simple tap/minimal horizontal drag (diffX < 15): Snap shut!
-      if (diffX < 15) {
-        containerEl.classList.remove('is-swiped');
-        cardEl.style.transform = 'translate3d(0px, 0, 0)';
-        if (deleteBg) deleteBg.style.width = '80px';
-        setTimeout(() => {
-          cardEl.style.transform = '';
-        }, 300);
-        bridge.haptic('light');
-        
-        // Prevent click/tap propagation to underlying buttons (Click Hijacking prevention)
-        if (Math.abs(diffX) < 5) {
-          e.preventDefault();
-          e.stopPropagation();
-        }
-      } else {
-        // Remain swiped open
-        cardEl.style.transform = 'translate3d(-80px, 0, 0)';
-        if (deleteBg) deleteBg.style.width = '80px';
-        setTimeout(() => {
-          cardEl.style.transform = '';
-        }, 300);
-      }
-    } else {
-      if (diffX > 40) {
-        // Reveal swipe actions
-        containerEl.classList.add('is-swiped');
-        cardEl.style.transform = 'translate3d(-80px, 0, 0)';
-        if (deleteBg) deleteBg.style.width = '80px';
-        setTimeout(() => {
-          cardEl.style.transform = '';
-        }, 300);
-        bridge.haptic('light');
-      } else {
-        // Return to closed state
-        cardEl.style.transform = 'translate3d(0px, 0, 0)';
-        if (deleteBg) deleteBg.style.width = '80px';
-        setTimeout(() => {
-          cardEl.style.transform = '';
-        }, 300);
-      }
-    }
-  };
+  // Touch handlers completely removed in favor of direct 1-Tap Glassmorphic delete button 🗑️
 
   // --- Sharing Modal Handlers ---
   const handleOpenSharing = async () => {
@@ -3679,65 +3481,17 @@ export default function App() {
                       <div
                         key={inv.id}
                         id={`swipe-container-${inv.id}`}
-                        className="swipe-delete-container animated-fade-in"
+                        className="animated-fade-in"
                         style={{ position: 'relative', overflow: 'hidden', borderRadius: 'var(--r-card)', marginBottom: 14 }}
                       >
-                        {/* Premium designed Swipe Delete Background button */}
-                        <div
-                          className="swipe-delete-bg"
-                          data-is-expired={isExpired}
-                          style={{
-                            position: 'absolute',
-                            right: 0,
-                            top: 0,
-                            bottom: 0,
-                            width: '80px',
-                            background: isExpired 
-                              ? 'linear-gradient(135deg, #9CA3AF 0%, #4B5563 100%)' // Premium Slate Grey for expired cards
-                              : 'linear-gradient(135deg, #FF6B6B 0%, #E63946 100%)', // Crimson red gradient for active cards
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: '6px',
-                            zIndex: 1,
-                            borderRadius: '0', // Straight edge to fill the parent container perfectly, parent clips it!
-                            cursor: 'pointer',
-                            boxShadow: 'inset 4px 0 10px rgba(0,0,0,0.12)'
-                          }}
-                          onClick={() => handleDeleteInvitation(inv.id)}
-                        >
-                          <div
-                            style={{
-                              width: '38px',
-                              height: '38px',
-                              borderRadius: '50%',
-                              background: 'rgba(255, 255, 255, 0.22)', // Translucent glassmorphism circle
-                              backdropFilter: 'blur(4px)',
-                              WebkitBackdropFilter: 'blur(4px)',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              boxShadow: '0 2px 8px rgba(0,0,0,0.08)'
-                            }}
-                          >
-                            <span style={{ fontSize: '18px' }}>🗑️</span>
-                          </div>
-                          <span style={{ color: '#fff', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.8px' }}>Xóa</span>
-                        </div>
-
                         {/* Invitation Card */}
                         <div
                           className={`mushy-card invitation-card ${isExpired ? 'invitation-card--expired' : ''}`}
                           style={{
                             margin: 0,
                             position: 'relative',
-                            zIndex: 2,
-                            touchAction: 'pan-y'
+                            zIndex: 2
                           }}
-                          onTouchStart={handleTouchStart}
-                          onTouchMove={(e) => handleTouchMove(e, inv.id)}
-                          onTouchEnd={(e) => handleTouchEnd(e, inv.id)}
                         >
                           <div className="buddy-card-header">
                             <div className="buddy-avatar-wrapper" style={{ width: 44, height: 44, flexShrink: 0 }}>
@@ -3751,10 +3505,33 @@ export default function App() {
                                 🎯 Thẻ: <strong>{getTagName(room.child_code)}</strong> · 📍 Địa điểm: <strong>{room.location}</strong>
                               </p>
                             </div>
-                            <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                              <span className={`grant-direction-tag ${inv.status === 'accepted' ? 'grant-direction-tag--in' : 'grant-direction-tag--out'}`} style={{ background: inv.status === 'accepted' ? '#10B981' : inv.status === 'pending' ? '#F59E0B' : '#9CA3AF', color: '#fff', whiteSpace: 'nowrap' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                              <span className={`grant-direction-tag ${inv.status === 'accepted' ? 'grant-direction-tag--in' : 'grant-direction-tag--out'}`} style={{ background: inv.status === 'accepted' ? '#10B981' : inv.status === 'pending' ? '#F59E0B' : '#9CA3AF', color: '#fff', whiteSpace: 'nowrap', margin: 0 }}>
                                 {inv.status === 'accepted' ? 'Đã Chấp Nhận' : inv.status === 'declined' ? 'Từ chối' : inv.status === 'pending' ? 'Đang Chờ' : 'Hết hạn'}
                               </span>
+                              <button
+                                onClick={() => handleDeleteInvitation(inv.id)}
+                                style={{
+                                  background: 'rgba(239, 68, 68, 0.07)',
+                                  border: 'none',
+                                  borderRadius: '50%',
+                                  width: '28px',
+                                  height: '28px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  cursor: 'pointer',
+                                  color: '#EF4444',
+                                  fontSize: '13px',
+                                  transition: 'background 0.2s ease, transform 0.1s ease',
+                                  padding: 0
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)'}
+                                onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.07)'}
+                                title="Xóa lời mời"
+                              >
+                                🗑️
+                              </button>
                             </div>
                           </div>
 
