@@ -1380,6 +1380,9 @@ export default function App() {
           .from('rooms')
           .update({ status: 'filling', updated_at: new Date().toISOString() })
           .eq('id', room.id);
+
+        // 7.1 Native chat creation via JS Bridge (even when filling)
+        await createRoomNativeChat(room.id, room.location);
       }
 
       // Optimistic updates
@@ -1493,7 +1496,12 @@ export default function App() {
       }
 
       if (!chatGroupId) {
-        chatGroupId = `mock-chat-${Math.random().toString(36).substring(2, 9)}`;
+        // Fallback to mock: preserve existing chat_group_id/mock messages to prevent reset
+        if (room.chat_group_id) {
+          chatGroupId = room.chat_group_id;
+        } else {
+          chatGroupId = `mock-chat-${Math.random().toString(36).substring(2, 9)}`;
+        }
       }
 
       // Update room in DB
@@ -3120,7 +3128,8 @@ export default function App() {
 </div>
 
                       {/* 7.1 Distributed Fault-Tolerance Group Chat Status */}
-                      {(room.status === 'matched' || isFull) && (
+                      {((room.status === 'matched' || room.status === 'filling' || isFull || totalJoined > 1) && 
+                        room.status !== 'cancelled' && room.status !== 'expired') && (
                         <div style={{ marginTop: 12, background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.15)', borderRadius: 10, padding: '8px 12px' }}>
                           {room.chat_group_id ? (
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
