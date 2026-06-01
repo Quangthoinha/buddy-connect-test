@@ -1282,5 +1282,25 @@ div:focus {
   padding-bottom: calc(130px + env(safe-area-inset-bottom, 0px)) !important;
 }
 
+/* =====================================================================
+   Premium Card Swiping System for Inbox Swipe Deletion 🗑️
+   ===================================================================== */
+.swipe-delete-container {
+  position: relative;
+  overflow: hidden;
+}
+
+.invitation-card {
+  transform: translate3d(0, 0, 0);
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Hardware-accelerated CSS snaps card to swiped position on .is-swiped class addition */
+.swipe-delete-container.is-swiped .invitation-card {
+  transform: translate3d(-80px, 0, 0) !important;
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+
 
 

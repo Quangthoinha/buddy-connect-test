@@ -1937,7 +1937,7 @@ export default function App() {
         const card = container.querySelector('.invitation-card');
         if (card) {
           card.style.transition = 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)';
-          card.style.transform = 'translate3d(0px, 0, 0)';
+          card.style.transform = '';
           const dbg = container.querySelector('.swipe-delete-bg');
           if (dbg) {
             dbg.style.transition = 'width 0.3s cubic-bezier(0.16, 1, 0.3, 1)';
@@ -2064,21 +2064,21 @@ export default function App() {
     if (isCurrentlySwiped) {
       if (diffX < -25) {
         containerEl.classList.remove('is-swiped');
-        cardEl.style.transform = 'translate3d(0px, 0, 0)';
+        cardEl.style.transform = '';
         if (deleteBg) deleteBg.style.width = '80px';
         bridge.haptic('light');
       } else {
-        cardEl.style.transform = 'translate3d(-80px, 0, 0)';
+        cardEl.style.transform = '';
         if (deleteBg) deleteBg.style.width = '80px';
       }
     } else {
       if (diffX > 40) {
         containerEl.classList.add('is-swiped');
-        cardEl.style.transform = 'translate3d(-80px, 0, 0)';
+        cardEl.style.transform = '';
         if (deleteBg) deleteBg.style.width = '80px';
         bridge.haptic('light');
       } else {
-        cardEl.style.transform = 'translate3d(0px, 0, 0)';
+        cardEl.style.transform = '';
         if (deleteBg) deleteBg.style.width = '80px';
       }
     }
@@ -3569,10 +3569,10 @@ export default function App() {
                 <div className="radar-pulse-wrapper" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, width: 24, height: 24 }}>
                   📥
                 </div>
-                <div className="radar-text-wrapper" style={{ flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
+                <div className="radar-text-wrapper" style={{ flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center', minWidth: 0, gap: '12px' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
                     <h4 className="compact-radar-title" style={{ margin: 0, fontSize: '13.5px', fontWeight: 700 }}>Hộp thư lời mời Connect</h4>
-                    <p className="compact-radar-sub" style={{ margin: '1px 0 0', fontSize: '11px', color: 'var(--muted)' }}>Lời mời bạn nhận được từ các phòng hẹn Connect của đồng nghiệp</p>
+                    <p className="compact-radar-sub" style={{ margin: '1px 0 0', fontSize: '11px', color: 'var(--muted)', textOverflow: 'ellipsis', whiteSpace: 'nowrap', overflow: 'hidden' }}>Lời mời nhận được từ đồng nghiệp</p>
                   </div>
                   <button
                     onClick={handleLoadMockInvitations}
@@ -3688,7 +3688,6 @@ export default function App() {
                             margin: 0,
                             position: 'relative',
                             zIndex: 2,
-                            transform: 'translate3d(0,0,0)',
                             touchAction: 'pan-y'
                           }}
                           onTouchStart={handleTouchStart}
