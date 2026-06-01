@@ -2935,7 +2935,7 @@ export default function App() {
 
                           {/* Rate limiting indicator */}
                           <div className="quota-indicator">
-                            Hạn ngạch lời mời pending: <strong>{pendingCount}/{currentLimit}</strong> (Công thức: <code>(Sĩ số - Đã tham gia) * 3</code>)
+                            Hạn ngạch lời mời pending: <strong>{pendingCount}/{currentLimit}</strong>
                           </div>
 
                           {/* Invite more candidates drop grid */}
