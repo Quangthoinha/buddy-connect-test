@@ -1823,18 +1823,39 @@ export default function App() {
       bridge.haptic('medium');
       const container = document.getElementById(`swipe-container-${invId}`);
       if (container) {
-        container.classList.remove('is-swiped');
-        const card = container.querySelector('.invitation-card');
-        if (card) {
-          card.style.transition = 'transform 0.2s ease';
-          card.style.transform = 'translate3d(0px, 0, 0)';
-        }
+        // 1. Instantly lock height to avoid layout jumps, then animate collapse
+        const height = container.offsetHeight;
+        container.style.height = `${height}px`;
+        container.style.transition = 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)';
+        
+        // Force browser reflow to apply locked height before animating to 0
+        container.offsetHeight;
+        
+        // 2. Smoothly shrink height, margin, and opacity to 0
+        container.style.opacity = '0';
+        container.style.height = '0px';
+        container.style.marginBottom = '0px';
+        container.style.paddingTop = '0px';
+        container.style.paddingBottom = '0px';
       }
-      await db.from('invitations').delete().eq('id', invId);
-      loadData();
-      dialog.success('Đã xóa', 'Lời mời đã được xóa thành công khỏi hộp thư.');
+
+      // 3. Once collapse animation completes, optimistically remove from state and sync silently in DB
+      setTimeout(async () => {
+        // Optimistically filter invitation list so the node disappears instantly from the DOM tree
+        setInvitations(prev => prev.filter(i => i.id !== invId));
+
+        try {
+          // Silent DB deletion in the background (no screen skeleton loaders or blinks!)
+          await db.from('invitations').delete().eq('id', invId);
+          // Silent background sync
+          await loadInvitationsData();
+        } catch (dbErr) {
+          console.error('Lỗi khi xóa trong DB:', dbErr);
+        }
+      }, 300);
+
     } catch (e) {
-      dialog.error('Lỗi khi xóa', e.message);
+      console.error('Lỗi khi thực hiện xóa lời mời:', e);
     }
   };
 
