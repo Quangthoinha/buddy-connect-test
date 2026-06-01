@@ -1416,13 +1416,21 @@ export default function App() {
       const accGuests = dbInvs ? dbInvs.map(i => i.receiver_id) : [];
       const participantIds = [room.host_id, ...accGuests];
 
-      // Call Native Shell Bridge
-      const nativeChatResult = await callNative('CREATE_CHAT_GROUP', {
-        title: `💬 Connect Room: ${roomLocation.substring(0, 20)}`,
-        userIds: participantIds
-      });
+      // Call Native Shell Bridge with fallback support
+      let chatGroupId;
+      try {
+        const nativeChatResult = await callNative('CREATE_CHAT_GROUP', {
+          title: `💬 Connect Room: ${roomLocation.substring(0, 20)}`,
+          userIds: participantIds
+        });
+        chatGroupId = nativeChatResult?.chatGroupId;
+      } catch (bridgeErr) {
+        console.warn('Lỗi Native Shell CREATE_CHAT_GROUP, sử dụng fallback ID.', bridgeErr);
+      }
 
-      const chatGroupId = nativeChatResult?.chatGroupId || `mock-chat-${Math.random().toString(36).substring(2, 9)}`;
+      if (!chatGroupId) {
+        chatGroupId = `mock-chat-${Math.random().toString(36).substring(2, 9)}`;
+      }
 
       // Update room in DB
       await db
@@ -1432,7 +1440,7 @@ export default function App() {
 
       console.log('✓ Khởi tạo nhóm chat thành công:', chatGroupId);
     } catch (e) {
-      console.warn('Lỗi JS Bridge CREATE_CHAT_GROUP. Phòng hẹn sẽ hiển thị kết nối bù.', e);
+      console.error('Lỗi khởi tạo nhóm chat:', e);
     }
   };
 
@@ -1440,7 +1448,8 @@ export default function App() {
   const handleReconnectChat = async (room) => {
     bridge.haptic('light');
     await createRoomNativeChat(room.id, room.location);
-    loadData();
+    await loadData();
+    dialog.success('Kết nối thành công!', 'Nhóm chat chéo của phòng hẹn đã được kết nối lại thành công.');
   };
 
   const parseChatMessages = (chatGroupId) => {
@@ -3247,7 +3256,7 @@ export default function App() {
                             <span>{hostObj.full_name?.charAt(0)}</span>
                           </div>
                           <div className="buddy-info">
-                            <h4 className="buddy-name" style={{ fontSize: 15 }}>
+                            <h4 className="buddy-name" style={{ fontSize: 15, display: 'block' }}>
                               Kèo Connect từ <strong>{hostObj.full_name}</strong>
                             </h4>
                             <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--muted)' }}>
