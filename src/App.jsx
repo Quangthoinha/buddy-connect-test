@@ -379,6 +379,7 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [inviteSearchQuery, setInviteSearchQuery] = useState('');
   const [fallbackEnabled, setFallbackEnabled] = useState(true);
+  const [reconnectingRoomId, setReconnectingRoomId] = useState(null);
 
   // Room Co-creation Form State
   const [showCreateRoom, setShowCreateRoom] = useState(false);
@@ -1401,10 +1402,20 @@ export default function App() {
   // Native chat group generator (PRD Section 7)
   const createRoomNativeChat = async (roomId, roomLocation) => {
     try {
-      // Fetch room participants to invite to the chat group
       const activeWs = scope.workspaceId;
-      const room = rooms.find(r => r.id === roomId);
-      if (!room) return;
+      if (!activeWs) return;
+
+      // Fetch the latest room state from DB to ensure absolute accuracy and avoid stale React state
+      const { data: room, error: roomDbErr } = await db
+        .from('rooms')
+        .select('*')
+        .eq('id', roomId)
+        .single();
+
+      if (roomDbErr || !room) {
+        console.error('Không tìm thấy phòng hẹn khi khởi tạo nhóm chat:', roomDbErr);
+        return;
+      }
 
       // Fetch latest accepted participants directly from DB to prevent React async state lag
       const { data: dbInvs } = await db
@@ -1446,10 +1457,19 @@ export default function App() {
 
   // 7.1 Distributed Fault-Tolerance reconnection trigger
   const handleReconnectChat = async (room) => {
+    if (reconnectingRoomId) return;
     bridge.haptic('light');
-    await createRoomNativeChat(room.id, room.location);
-    await loadData();
-    dialog.success('Kết nối thành công!', 'Nhóm chat chéo của phòng hẹn đã được kết nối lại thành công.');
+    setReconnectingRoomId(room.id);
+    try {
+      await createRoomNativeChat(room.id, room.location);
+      await loadData();
+      dialog.success('Kết nối thành công!', 'Nhóm chat chéo của phòng hẹn đã được kết nối lại thành công.');
+    } catch (err) {
+      console.error('Lỗi khi kết nối lại nhóm chat:', err);
+      dialog.error('Lỗi kết nối lại', 'Không thể kết nối lại nhóm chat. Vui lòng thử lại sau.');
+    } finally {
+      setReconnectingRoomId(null);
+    }
   };
 
   const parseChatMessages = (chatGroupId) => {
@@ -2931,13 +2951,16 @@ export default function App() {
                             </div>
                           ) : (
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <span style={{ fontSize: 12, color: '#D97706', fontWeight: 600 }}>⏳ Đang khởi tạo nhóm kết nối...</span>
+                              <span style={{ fontSize: 12, color: '#D97706', fontWeight: 600 }}>
+                                {reconnectingRoomId === room.id ? '⏳ Đang thiết lập kết nối lại...' : '⏳ Đang khởi tạo nhóm kết nối...'}
+                              </span>
                               <button
                                 className="mushy-btn mushy-btn--ghost"
-                                style={{ minHeight: 30, fontSize: 11, padding: '4px 10px', color: '#D97706', borderColor: '#F59E0B' }}
+                                style={{ minHeight: 30, fontSize: 11, padding: '4px 10px', color: '#D97706', borderColor: '#F59E0B', opacity: reconnectingRoomId === room.id ? 0.6 : 1 }}
+                                disabled={reconnectingRoomId === room.id}
                                 onClick={() => handleReconnectChat(room)}
                               >
-                                Kết nối lại nhóm chat
+                                {reconnectingRoomId === room.id ? '⏳ Kết nối lại...' : 'Kết nối lại nhóm chat'}
                               </button>
                             </div>
                           )}
@@ -3252,19 +3275,19 @@ export default function App() {
                         style={{ marginBottom: 14 }}
                       >
                         <div className="buddy-card-header">
-                          <div className="buddy-avatar-wrapper" style={{ width: 44, height: 44 }}>
+                          <div className="buddy-avatar-wrapper" style={{ width: 44, height: 44, flexShrink: 0 }}>
                             <span>{hostObj.full_name?.charAt(0)}</span>
                           </div>
-                          <div className="buddy-info">
-                            <h4 className="buddy-name" style={{ fontSize: 15, display: 'block' }}>
+                          <div className="buddy-info" style={{ flex: 1, minWidth: 0 }}>
+                            <h4 style={{ fontSize: '14.5px', fontWeight: 700, color: 'var(--ink)', margin: 0, lineHeight: 1.35, display: 'block' }}>
                               Kèo Connect từ <strong>{hostObj.full_name}</strong>
                             </h4>
-                            <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--muted)' }}>
+                            <p style={{ margin: '3px 0 0', fontSize: 12, color: 'var(--muted)', lineHeight: 1.35 }}>
                               🎯 Thẻ: <strong>{getTagName(room.child_code)}</strong> · 📍 Địa điểm: <strong>{room.location}</strong>
                             </p>
                           </div>
-                          <div style={{ textAlign: 'right' }}>
-                            <span className={`grant-direction-tag ${inv.status === 'accepted' ? 'grant-direction-tag--in' : 'grant-direction-tag--out'}`} style={{ background: inv.status === 'accepted' ? '#10B981' : inv.status === 'pending' ? '#F59E0B' : '#9CA3AF', color: '#fff' }}>
+                          <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                            <span className={`grant-direction-tag ${inv.status === 'accepted' ? 'grant-direction-tag--in' : 'grant-direction-tag--out'}`} style={{ background: inv.status === 'accepted' ? '#10B981' : inv.status === 'pending' ? '#F59E0B' : '#9CA3AF', color: '#fff', whiteSpace: 'nowrap' }}>
                               {inv.status === 'accepted' ? 'Đã Chấp Nhận' : inv.status === 'declined' ? 'Từ chối' : inv.status === 'pending' ? 'Đang Chờ' : 'Hết hạn'}
                             </span>
                           </div>
