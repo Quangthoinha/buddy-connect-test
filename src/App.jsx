@@ -380,6 +380,7 @@ export default function App() {
   const [inviteSearchQuery, setInviteSearchQuery] = useState('');
   const [fallbackEnabled, setFallbackEnabled] = useState(true);
   const [reconnectingRoomId, setReconnectingRoomId] = useState(null);
+  const [highlightedRoomId, setHighlightedRoomId] = useState(null);
   const swipeStartX = useRef(0);
   const swipeStartY = useRef(0);
   const isSwiping = useRef(false);
@@ -1379,7 +1380,24 @@ export default function App() {
       }
 
       bridge.haptic('success');
-      loadData();
+      await loadData();
+
+      // Optimistically redirect to the 'rooms' tab and trigger a premium highlight glow
+      setHighlightedRoomId(room.id);
+      setActiveTab('rooms');
+
+      // Allow DOM rendering of the tab switcher, then scroll the accepted room card into center view smoothly
+      setTimeout(() => {
+        const roomEl = document.getElementById(`room-card-${room.id}`);
+        if (roomEl) {
+          roomEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 350);
+
+      // Fade out the crimson highlighting border after 3.5 seconds
+      setTimeout(() => {
+        setHighlightedRoomId(null);
+      }, 3850);
     } catch (e) {
       dialog.error('Lỗi khi chấp nhận', e.message);
     }
@@ -3013,7 +3031,21 @@ export default function App() {
                   const isQuotaExceeded = pendingCount >= currentLimit;
 
                   return (
-                    <div key={room.id} className="mushy-card activity-card" style={{ marginBottom: 14 }}>
+                    <div 
+                      key={room.id} 
+                      id={`room-card-${room.id}`}
+                      className={`mushy-card activity-card ${highlightedRoomId === room.id ? 'room-card--highlighted' : ''}`} 
+                      style={{ 
+                        marginBottom: 14,
+                        transition: 'all 0.6s cubic-bezier(0.16, 1, 0.3, 1)',
+                        ...(highlightedRoomId === room.id ? {
+                          borderColor: 'var(--brand)',
+                          boxShadow: '0 0 0 2.5px var(--brand), 0 10px 32px rgba(230, 57, 70, 0.22)',
+                          transform: 'scale(1.03) translate3d(0,0,0)',
+                          background: 'rgba(230, 57, 70, 0.02)'
+                        } : {})
+                      }}
+                    >
                       <div className={`activity-type-banner act-badge-sports`}>
                         {FLAT_TAGS.find(t => t.code === room.child_code)?.name?.charAt(0) || '🏸'}
                       </div>
