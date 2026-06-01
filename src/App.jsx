@@ -380,7 +380,6 @@ export default function App() {
   const [inviteSearchQuery, setInviteSearchQuery] = useState('');
   const [fallbackEnabled, setFallbackEnabled] = useState(true);
   const [reconnectingRoomId, setReconnectingRoomId] = useState(null);
-  const [swipedInvId, setSwipedInvId] = useState(null);
   const swipeStartX = useRef(0);
   const swipeStartY = useRef(0);
   const isSwiping = useRef(false);
@@ -1803,7 +1802,15 @@ export default function App() {
   const handleDeleteInvitation = async (invId) => {
     try {
       bridge.haptic('medium');
-      setSwipedInvId(null);
+      const container = document.getElementById(`swipe-container-${invId}`);
+      if (container) {
+        container.classList.remove('is-swiped');
+        const card = container.querySelector('.invitation-card');
+        if (card) {
+          card.style.transition = 'transform 0.2s ease';
+          card.style.transform = 'translate3d(0px, 0, 0)';
+        }
+      }
       await db.from('invitations').delete().eq('id', invId);
       loadData();
       dialog.success('Đã xóa', 'Lời mời đã được xóa thành công khỏi hộp thư.');
@@ -1812,8 +1819,21 @@ export default function App() {
     }
   };
 
-  // Pure 60FPS CSS inline transition touch handlers for buttery smooth mobile swiping
+  // Pure 60FPS GPU-accelerated touch handlers for buttery smooth mobile swiping (no React re-renders)
   const handleTouchStart = (e) => {
+    // Smoothly close any other swiped cards in the DOM first for premium native feel
+    const swipedContainers = document.querySelectorAll('.swipe-delete-container.is-swiped');
+    swipedContainers.forEach(container => {
+      if (container !== e.currentTarget.parentElement) {
+        container.classList.remove('is-swiped');
+        const card = container.querySelector('.invitation-card');
+        if (card) {
+          card.style.transition = 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)';
+          card.style.transform = 'translate3d(0px, 0, 0)';
+        }
+      }
+    });
+
     swipeStartX.current = e.touches[0].clientX;
     swipeStartY.current = e.touches[0].clientY;
     isSwiping.current = true;
@@ -1826,33 +1846,34 @@ export default function App() {
     const diffX = swipeStartX.current - currentX;
     const diffY = swipeStartY.current - currentY;
 
-    // If scrolling vertically, cancel swiping gesture to let page scroll
+    // Ignore if scrolling vertically to allow native page scroll
     if (Math.abs(diffY) > Math.abs(diffX)) {
       isSwiping.current = false;
       return;
     }
 
     const cardEl = e.currentTarget;
-    const isCurrentlySwiped = swipedInvId === invId;
+    const isCurrentlySwiped = cardEl.parentElement.classList.contains('is-swiped');
     
     let translateX = 0;
     if (isCurrentlySwiped) {
       // Swiping right closes the swiped card
       translateX = -80 - diffX;
       if (translateX > 0) translateX = 0;
-      if (translateX < -120) translateX = -120; // soft bounce limit on over-scroll
+      if (translateX < -120) translateX = -120; // elastic swipe limit
     } else {
       // Swiping left reveals the delete button
       if (diffX > 0) {
         translateX = -diffX;
-        if (translateX < -120) translateX = -120; // soft bounce limit on over-scroll
+        if (translateX < -120) translateX = -120; // elastic swipe limit
       }
     }
 
+    // Direct GPU-accelerated translate3d to bypass React render tree completely (60FPS)
     cardEl.style.transition = 'none';
-    cardEl.style.transform = `translateX(${translateX}px)`;
+    cardEl.style.transform = `translate3d(${translateX}px, 0, 0)`;
     
-    // Prevent default scroll behaviors once active horizontal swipe is confirmed
+    // Prevent default scroll behavior once active horizontal swipe is confirmed
     if (diffX > 15 && e.cancelable) {
       e.preventDefault();
     }
@@ -1863,29 +1884,28 @@ export default function App() {
     isSwiping.current = false;
     
     const cardEl = e.currentTarget;
+    const containerEl = cardEl.parentElement;
     const currentX = e.changedTouches[0].clientX;
     const diffX = swipeStartX.current - currentX;
     
-    cardEl.style.transition = 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)';
+    cardEl.style.transition = 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)';
     
-    const isCurrentlySwiped = swipedInvId === invId;
+    const isCurrentlySwiped = containerEl.classList.contains('is-swiped');
     if (isCurrentlySwiped) {
-      if (diffX < -30) {
-        setSwipedInvId(null);
-        cardEl.style.transform = 'translateX(0px)';
+      if (diffX < -25) {
+        containerEl.classList.remove('is-swiped');
+        cardEl.style.transform = 'translate3d(0px, 0, 0)';
         bridge.haptic('light');
       } else {
-        setSwipedInvId(invId);
-        cardEl.style.transform = 'translateX(-80px)';
+        cardEl.style.transform = 'translate3d(-80px, 0, 0)';
       }
     } else {
-      if (diffX > 45) {
-        setSwipedInvId(invId);
-        cardEl.style.transform = 'translateX(-80px)';
+      if (diffX > 40) {
+        containerEl.classList.add('is-swiped');
+        cardEl.style.transform = 'translate3d(-80px, 0, 0)';
         bridge.haptic('light');
       } else {
-        setSwipedInvId(null);
-        cardEl.style.transform = 'translateX(0px)';
+        cardEl.style.transform = 'translate3d(0px, 0, 0)';
       }
     }
   };
@@ -3387,10 +3407,11 @@ export default function App() {
                     return (
                       <div
                         key={inv.id}
+                        id={`swipe-container-${inv.id}`}
                         className="swipe-delete-container animated-fade-in"
                         style={{ position: 'relative', overflow: 'hidden', borderRadius: 'var(--r-card)', marginBottom: 14 }}
                       >
-                        {/* Swipe Delete Background button */}
+                        {/* Premium designed Swipe Delete Background button */}
                         <div
                           className="swipe-delete-bg"
                           style={{
@@ -3399,18 +3420,23 @@ export default function App() {
                             top: 0,
                             bottom: 0,
                             width: '80px',
-                            background: 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)',
+                            background: isExpired 
+                              ? 'linear-gradient(135deg, #9CA3AF 0%, #4B5563 100%)' // Premium Slate Grey for expired cards
+                              : 'linear-gradient(135deg, #FF6B6B 0%, #E63946 100%)', // Crimson red gradient for active cards
                             display: 'flex',
+                            flexDirection: 'column',
                             alignItems: 'center',
                             justifyContent: 'center',
+                            gap: '4px',
                             zIndex: 1,
-                            borderRadius: '0 var(--r-card) var(--r-card) 0',
+                            borderRadius: 'var(--r-card)',
                             cursor: 'pointer',
-                            boxShadow: 'inset -2px 0 8px rgba(0,0,0,0.1)'
+                            boxShadow: 'inset 4px 0 10px rgba(0,0,0,0.12)'
                           }}
                           onClick={() => handleDeleteInvitation(inv.id)}
                         >
-                          <span style={{ color: '#fff', fontSize: '13.5px', fontWeight: 800 }}>Xóa</span>
+                          <span style={{ fontSize: '18px' }}>🗑️</span>
+                          <span style={{ color: '#fff', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Xóa</span>
                         </div>
 
                         {/* Invitation Card */}
@@ -3420,8 +3446,7 @@ export default function App() {
                             margin: 0,
                             position: 'relative',
                             zIndex: 2,
-                            transition: 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
-                            transform: swipedInvId === inv.id ? 'translateX(-80px)' : 'translateX(0px)',
+                            transform: 'translate3d(0,0,0)',
                             touchAction: 'pan-y'
                           }}
                           onTouchStart={handleTouchStart}
