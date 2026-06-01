@@ -1277,5 +1277,10 @@ div:focus {
   box-shadow: none !important;
 }
 
+/* Ensure scrollable page content can slide completely above the fixed navigation bar */
+.mushy-page {
+  padding-bottom: calc(130px + env(safe-area-inset-bottom, 0px)) !important;
+}
+
 
 

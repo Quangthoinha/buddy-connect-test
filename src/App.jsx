@@ -2065,11 +2065,23 @@ export default function App() {
           className={`nav-tab-btn ${activeTab === 'inbox' ? 'nav-tab-btn--active' : ''}`}
           onClick={() => setActiveTab('inbox')}
         >
-          <span>📥</span> Lời Mời
-          {(() => {
-            const count = invitations.filter(i => i.receiver_id === ctx.userId && i.status === 'pending').length;
-            return count > 0 ? <span className="mushy-tab-badge">{count}</span> : null;
-          })()}
+          <span style={{ position: 'relative', display: 'inline-block' }}>
+            📥
+            {invitations.filter(i => i.receiver_id === ctx.userId && i.status === 'pending').length > 0 && (
+              <span className="notification-dot" style={{
+                position: 'absolute',
+                top: -3,
+                right: -3,
+                width: 7,
+                height: 7,
+                borderRadius: '50%',
+                background: 'var(--brand)',
+                border: '1.5px solid #fff',
+                boxShadow: '0 1px 3px rgba(230, 57, 70, 0.3)'
+              }} />
+            )}
+          </span>
+          Lời Mời
         </button>
         <button
           className={`nav-tab-btn ${activeTab === 'profile' ? 'nav-tab-btn--active' : ''}`}
