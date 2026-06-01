@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { getContext, isInShell } from './lib/context.js';
 import { callNative, bridge } from './lib/bridge.js';
 import { db, dbPublic } from './lib/supabase.js';
@@ -380,6 +380,10 @@ export default function App() {
   const [inviteSearchQuery, setInviteSearchQuery] = useState('');
   const [fallbackEnabled, setFallbackEnabled] = useState(true);
   const [reconnectingRoomId, setReconnectingRoomId] = useState(null);
+  const [swipedInvId, setSwipedInvId] = useState(null);
+  const swipeStartX = useRef(0);
+  const swipeStartY = useRef(0);
+  const isSwiping = useRef(false);
 
   // Room Co-creation Form State
   const [showCreateRoom, setShowCreateRoom] = useState(false);
@@ -636,6 +640,28 @@ export default function App() {
           .update({ status: 'expired', updated_at: nowStr })
           .in('room_id', roomIds)
           .eq('status', 'pending');
+      }
+
+      // Delete/clear mock chat logs for rooms scheduled more than 1 week ago
+      const oneWeekAgo = new Date();
+      oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+      const oneWeekAgoStr = oneWeekAgo.toISOString();
+
+      const { data: oldRoomsChatToClean } = await db
+        .from('rooms')
+        .select('id')
+        .eq('workspace_id', activeWs)
+        .lt('scheduled_at', oneWeekAgoStr)
+        .not('chat_group_id', 'is', null);
+
+      if (oldRoomsChatToClean && oldRoomsChatToClean.length > 0) {
+        const oldRoomIds = oldRoomsChatToClean.map(r => r.id);
+        console.log('Lazy daemon cleaning old chat histories (> 1 week) for rooms:', oldRoomIds);
+
+        await db
+          .from('rooms')
+          .update({ chat_group_id: null, updated_at: nowStr })
+          .in('id', oldRoomIds);
       }
     } catch (e) {
       console.warn('Lỗi lazy daemon sweep:', e);
@@ -1771,6 +1797,96 @@ export default function App() {
       loadData();
     } catch (e) {
       dialog.error('Lỗi thu hồi', e.message);
+    }
+  };
+
+  const handleDeleteInvitation = async (invId) => {
+    try {
+      bridge.haptic('medium');
+      setSwipedInvId(null);
+      await db.from('invitations').delete().eq('id', invId);
+      loadData();
+      dialog.success('Đã xóa', 'Lời mời đã được xóa thành công khỏi hộp thư.');
+    } catch (e) {
+      dialog.error('Lỗi khi xóa', e.message);
+    }
+  };
+
+  // Pure 60FPS CSS inline transition touch handlers for buttery smooth mobile swiping
+  const handleTouchStart = (e) => {
+    swipeStartX.current = e.touches[0].clientX;
+    swipeStartY.current = e.touches[0].clientY;
+    isSwiping.current = true;
+  };
+
+  const handleTouchMove = (e, invId) => {
+    if (!isSwiping.current) return;
+    const currentX = e.touches[0].clientX;
+    const currentY = e.touches[0].clientY;
+    const diffX = swipeStartX.current - currentX;
+    const diffY = swipeStartY.current - currentY;
+
+    // If scrolling vertically, cancel swiping gesture to let page scroll
+    if (Math.abs(diffY) > Math.abs(diffX)) {
+      isSwiping.current = false;
+      return;
+    }
+
+    const cardEl = e.currentTarget;
+    const isCurrentlySwiped = swipedInvId === invId;
+    
+    let translateX = 0;
+    if (isCurrentlySwiped) {
+      // Swiping right closes the swiped card
+      translateX = -80 - diffX;
+      if (translateX > 0) translateX = 0;
+      if (translateX < -120) translateX = -120; // soft bounce limit on over-scroll
+    } else {
+      // Swiping left reveals the delete button
+      if (diffX > 0) {
+        translateX = -diffX;
+        if (translateX < -120) translateX = -120; // soft bounce limit on over-scroll
+      }
+    }
+
+    cardEl.style.transition = 'none';
+    cardEl.style.transform = `translateX(${translateX}px)`;
+    
+    // Prevent default scroll behaviors once active horizontal swipe is confirmed
+    if (diffX > 15 && e.cancelable) {
+      e.preventDefault();
+    }
+  };
+
+  const handleTouchEnd = (e, invId) => {
+    if (!isSwiping.current) return;
+    isSwiping.current = false;
+    
+    const cardEl = e.currentTarget;
+    const currentX = e.changedTouches[0].clientX;
+    const diffX = swipeStartX.current - currentX;
+    
+    cardEl.style.transition = 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)';
+    
+    const isCurrentlySwiped = swipedInvId === invId;
+    if (isCurrentlySwiped) {
+      if (diffX < -30) {
+        setSwipedInvId(null);
+        cardEl.style.transform = 'translateX(0px)';
+        bridge.haptic('light');
+      } else {
+        setSwipedInvId(invId);
+        cardEl.style.transform = 'translateX(-80px)';
+      }
+    } else {
+      if (diffX > 45) {
+        setSwipedInvId(invId);
+        cardEl.style.transform = 'translateX(-80px)';
+        bridge.haptic('light');
+      } else {
+        setSwipedInvId(null);
+        cardEl.style.transform = 'translateX(0px)';
+      }
     }
   };
 
@@ -3271,65 +3387,104 @@ export default function App() {
                     return (
                       <div
                         key={inv.id}
-                        className={`mushy-card invitation-card ${isExpired ? 'invitation-card--expired' : ''}`}
-                        style={{ marginBottom: 14 }}
+                        className="swipe-delete-container animated-fade-in"
+                        style={{ position: 'relative', overflow: 'hidden', borderRadius: 'var(--r-card)', marginBottom: 14 }}
                       >
-                        <div className="buddy-card-header">
-                          <div className="buddy-avatar-wrapper" style={{ width: 44, height: 44, flexShrink: 0 }}>
-                            <span>{hostObj.full_name?.charAt(0)}</span>
-                          </div>
-                          <div className="buddy-info" style={{ flex: 1, minWidth: 0 }}>
-                            <h4 style={{ fontSize: '14.5px', fontWeight: 700, color: 'var(--ink)', margin: 0, lineHeight: 1.35, display: 'block' }}>
-                              Kèo Connect từ <strong>{hostObj.full_name}</strong>
-                            </h4>
-                            <p style={{ margin: '3px 0 0', fontSize: 12, color: 'var(--muted)', lineHeight: 1.35 }}>
-                              🎯 Thẻ: <strong>{getTagName(room.child_code)}</strong> · 📍 Địa điểm: <strong>{room.location}</strong>
-                            </p>
-                          </div>
-                          <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                            <span className={`grant-direction-tag ${inv.status === 'accepted' ? 'grant-direction-tag--in' : 'grant-direction-tag--out'}`} style={{ background: inv.status === 'accepted' ? '#10B981' : inv.status === 'pending' ? '#F59E0B' : '#9CA3AF', color: '#fff', whiteSpace: 'nowrap' }}>
-                              {inv.status === 'accepted' ? 'Đã Chấp Nhận' : inv.status === 'declined' ? 'Từ chối' : inv.status === 'pending' ? 'Đang Chờ' : 'Hết hạn'}
-                            </span>
-                          </div>
+                        {/* Swipe Delete Background button */}
+                        <div
+                          className="swipe-delete-bg"
+                          style={{
+                            position: 'absolute',
+                            right: 0,
+                            top: 0,
+                            bottom: 0,
+                            width: '80px',
+                            background: 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            zIndex: 1,
+                            borderRadius: '0 var(--r-card) var(--r-card) 0',
+                            cursor: 'pointer',
+                            boxShadow: 'inset -2px 0 8px rgba(0,0,0,0.1)'
+                          }}
+                          onClick={() => handleDeleteInvitation(inv.id)}
+                        >
+                          <span style={{ color: '#fff', fontSize: '13.5px', fontWeight: 800 }}>Xóa</span>
                         </div>
 
-                        <div style={{ marginTop: 8, fontSize: 12, color: 'var(--muted)' }}>
-                          ⏰ Thời gian: <strong>{formatTime(room.scheduled_at)}</strong>
-                        </div>
-
-                        {/* Expired UX (PRD Section 8.2) */}
-                        {isExpired ? (
-                          <div className="expired-badge">
-                            Rất tiếc, phòng hẹn đã đủ thành viên hoặc đã bị hủy. Hẹn bạn kèo sau nhé! 🍄
-                          </div>
-                        ) : (
-                          inv.status === 'pending' && (
-                            <div style={{ display: 'flex', gap: 10, marginTop: 12, borderTop: '1px solid var(--hairline)', paddingTop: 12 }}>
-                              <button
-                                className="mushy-btn mushy-btn--primary"
-                                style={{ flex: 1, minHeight: 38, height: 38, padding: '0 16px', fontSize: 13.5 }}
-                                onClick={() => handleAcceptInvitation(inv)}
-                              >
-                                Chấp nhận tham gia
-                              </button>
-                              <button
-                                className="mushy-btn mushy-btn--ghost"
-                                style={{ 
-                                  color: 'var(--danger)', 
-                                  borderColor: 'var(--danger)', 
-                                  minHeight: 38, 
-                                  height: 38, 
-                                  padding: '0 16px', 
-                                  fontSize: 13.5, 
-                                  whiteSpace: 'nowrap' 
-                                }}
-                                onClick={() => handleDeclineInvitation(inv)}
-                              >
-                                Từ chối
-                              </button>
+                        {/* Invitation Card */}
+                        <div
+                          className={`mushy-card invitation-card ${isExpired ? 'invitation-card--expired' : ''}`}
+                          style={{
+                            margin: 0,
+                            position: 'relative',
+                            zIndex: 2,
+                            transition: 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
+                            transform: swipedInvId === inv.id ? 'translateX(-80px)' : 'translateX(0px)',
+                            touchAction: 'pan-y'
+                          }}
+                          onTouchStart={handleTouchStart}
+                          onTouchMove={(e) => handleTouchMove(e, inv.id)}
+                          onTouchEnd={(e) => handleTouchEnd(e, inv.id)}
+                        >
+                          <div className="buddy-card-header">
+                            <div className="buddy-avatar-wrapper" style={{ width: 44, height: 44, flexShrink: 0 }}>
+                              <span>{hostObj.full_name?.charAt(0)}</span>
                             </div>
-                          )
-                        )}
+                            <div className="buddy-info" style={{ flex: 1, minWidth: 0 }}>
+                              <h4 style={{ fontSize: '14.5px', fontWeight: 700, color: 'var(--ink)', margin: 0, lineHeight: 1.35, display: 'block' }}>
+                                Kèo Connect từ <strong>{hostObj.full_name}</strong>
+                              </h4>
+                              <p style={{ margin: '3px 0 0', fontSize: 12, color: 'var(--muted)', lineHeight: 1.35 }}>
+                                🎯 Thẻ: <strong>{getTagName(room.child_code)}</strong> · 📍 Địa điểm: <strong>{room.location}</strong>
+                              </p>
+                            </div>
+                            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                              <span className={`grant-direction-tag ${inv.status === 'accepted' ? 'grant-direction-tag--in' : 'grant-direction-tag--out'}`} style={{ background: inv.status === 'accepted' ? '#10B981' : inv.status === 'pending' ? '#F59E0B' : '#9CA3AF', color: '#fff', whiteSpace: 'nowrap' }}>
+                                {inv.status === 'accepted' ? 'Đã Chấp Nhận' : inv.status === 'declined' ? 'Từ chối' : inv.status === 'pending' ? 'Đang Chờ' : 'Hết hạn'}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div style={{ marginTop: 8, fontSize: 12, color: 'var(--muted)' }}>
+                            ⏰ Thời gian: <strong>{formatTime(room.scheduled_at)}</strong>
+                          </div>
+
+                          {/* Expired UX (PRD Section 8.2) */}
+                          {isExpired ? (
+                            <div className="expired-badge">
+                              Rất tiếc, phòng hẹn đã đủ thành viên hoặc đã bị hủy. Hẹn bạn kèo sau nhé! 🍄
+                            </div>
+                          ) : (
+                            inv.status === 'pending' && (
+                              <div style={{ display: 'flex', gap: 10, marginTop: 12, borderTop: '1px solid var(--hairline)', paddingTop: 12 }}>
+                                <button
+                                  className="mushy-btn mushy-btn--primary"
+                                  style={{ flex: 1, minHeight: 38, height: 38, padding: '0 16px', fontSize: 13.5 }}
+                                  onClick={() => handleAcceptInvitation(inv)}
+                                >
+                                  Chấp nhận tham gia
+                                </button>
+                                <button
+                                  className="mushy-btn mushy-btn--ghost"
+                                  style={{ 
+                                    color: 'var(--danger)', 
+                                    borderColor: 'var(--danger)', 
+                                    minHeight: 38, 
+                                    height: 38, 
+                                    padding: '0 16px', 
+                                    fontSize: 13.5, 
+                                    whiteSpace: 'nowrap' 
+                                  }}
+                                  onClick={() => handleDeclineInvitation(inv)}
+                                >
+                                  Từ chối
+                                </button>
+                              </div>
+                            )
+                          )}
+                        </div>
                       </div>
                     );
                   })
