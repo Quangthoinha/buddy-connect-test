@@ -3449,25 +3449,6 @@ export default function App() {
                     <h4 className="compact-radar-title" style={{ margin: 0, fontSize: '13.5px', fontWeight: 700 }}>Hộp thư lời mời Connect</h4>
                     <p className="compact-radar-sub" style={{ margin: '1px 0 0', fontSize: '11px', color: 'var(--muted)', textOverflow: 'ellipsis', whiteSpace: 'nowrap', overflow: 'hidden' }}>Lời mời nhận được từ đồng nghiệp</p>
                   </div>
-                  <button
-                    onClick={handleLoadMockInvitations}
-                    style={{
-                      background: 'rgba(230, 57, 70, 0.08)',
-                      color: 'var(--brand)',
-                      border: 'none',
-                      padding: '5px 12px',
-                      borderRadius: '12px',
-                      fontSize: '10.5px',
-                      fontWeight: 800,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      boxShadow: '0 2px 6px rgba(230, 57, 70, 0.06)'
-                    }}
-                  >
-                    ⚡ Mock Data
-                  </button>
                 </div>
               </div>
 
@@ -3476,23 +3457,6 @@ export default function App() {
                   <div className="mushy-empty-icon">📥</div>
                   <h4 className="mushy-empty-title">Hộp thư lời mời trống</h4>
                   <p className="mushy-empty-desc">Hiện chưa có lời mời Connect nào gửi tới bạn. Hãy thử đổi sở thích hoặc chủ động lập kèo trước nhé!</p>
-                  <button
-                    className="mushy-btn mushy-btn--ghost"
-                    style={{ 
-                      marginTop: 16, 
-                      minHeight: 34, 
-                      height: 34, 
-                      fontSize: 12, 
-                      padding: '0 16px',
-                      color: 'var(--brand)',
-                      borderColor: 'var(--brand)',
-                      background: 'var(--brand-soft)',
-                      fontWeight: 800
-                    }}
-                    onClick={handleLoadMockInvitations}
-                  >
-                    ⚡ Nạp Mock Data để test Vuốt Xóa
-                  </button>
                 </div>
               ) : (
                 invitations
