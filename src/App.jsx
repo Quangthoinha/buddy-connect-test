@@ -426,6 +426,26 @@ export default function App() {
   const [chatInput, setChatInput] = useState('');
   const [avatarTooltip, setAvatarTooltip] = useState(null); // { member, profile } — shown on long-press
 
+  const [hiddenRoomIds, setHiddenRoomIds] = useState([]);
+
+  useEffect(() => {
+    if (ctx.userId) {
+      try {
+        const stored = JSON.parse(localStorage.getItem('hidden_rooms_' + ctx.userId) || '[]');
+        setHiddenRoomIds(stored);
+      } catch (e) {
+        setHiddenRoomIds([]);
+      }
+    }
+  }, [ctx.userId]);
+
+  const handleHideOldRoom = (roomId) => {
+    bridge.haptic('light');
+    const updated = [...hiddenRoomIds, roomId];
+    setHiddenRoomIds(updated);
+    localStorage.setItem('hidden_rooms_' + ctx.userId, JSON.stringify(updated));
+  };
+
   useEffect(() => {
     setRadarPage(1);
   }, [searchQuery, fallbackEnabled, scope]);
@@ -615,7 +635,7 @@ export default function App() {
       .from('rooms')
       .select('*')
       .eq('workspace_id', activeWs)
-      .order('scheduled_at', { ascending: true });
+      .order('created_at', { ascending: false });
 
     setRooms(rms || []);
   }
@@ -3318,6 +3338,7 @@ export default function App() {
               {/* Rooms list */}
               {(() => {
                 const userRooms = rooms.filter(room => {
+                  if (hiddenRoomIds.includes(room.id)) return false;
                   const isHost = room.host_id === ctx.userId;
                   const hasJoined = invitations.some(i => i.room_id === room.id && i.receiver_id === ctx.userId && i.status === 'accepted');
                   return isHost || hasJoined;
@@ -3333,7 +3354,10 @@ export default function App() {
                   );
                 }
 
-                return userRooms.map(room => {
+                // Sắp xếp phòng từ mới nhất đến cũ nhất
+                const sortedRooms = [...userRooms].sort((a, b) => new Date(b.created_at || b.scheduled_at) - new Date(a.created_at || a.scheduled_at));
+
+                return sortedRooms.map(room => {
                   const isHost = room.host_id === ctx.userId;
                   const roomInvs = invitations.filter(i => i.room_id === room.id);
                   const acceptedCount = roomInvs.filter(i => i.status === 'accepted').length;
@@ -3742,6 +3766,19 @@ export default function App() {
                             onClick={() => handleLeaveRoom(room)}
                           >
                             🚪 Out kèo / Rút khỏi phòng
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Xóa dọn dẹp kèo cũ đã hủy hoặc hết hạn */}
+                      {(room.status === 'cancelled' || room.status === 'expired') && (
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12, borderTop: '1px solid var(--hairline)', paddingTop: 12 }}>
+                          <button
+                            className="mushy-btn mushy-btn--ghost"
+                            style={{ color: 'var(--danger)', borderColor: 'var(--danger)', minHeight: 36, fontSize: 12, padding: '4px 12px' }}
+                            onClick={() => handleHideOldRoom(room.id)}
+                          >
+                            🗑️ Xóa khỏi danh sách
                           </button>
                         </div>
                       )}
