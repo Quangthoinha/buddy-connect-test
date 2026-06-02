@@ -1616,6 +1616,63 @@ export default function App() {
     }
   };
 
+  // --- CHAT UNREAD & NOTIFICATION ENGINE ---
+  const prevRoomsRef = useRef([]);
+
+  useEffect(() => {
+    if (activeChatRoom) {
+      localStorage.setItem('chat_read_time_' + activeChatRoom.id, new Date().toISOString());
+    }
+  }, [activeChatRoom, rooms]);
+
+  useEffect(() => {
+    if (prevRoomsRef.current && prevRoomsRef.current.length > 0) {
+      rooms.forEach(room => {
+        const oldRoom = prevRoomsRef.current.find(r => r.id === room.id);
+        if (oldRoom) {
+          const newMsgs = parseChatMessages(room.chat_group_id);
+          const oldMsgs = parseChatMessages(oldRoom.chat_group_id);
+          if (newMsgs.length > oldMsgs.length) {
+            const lastMsg = newMsgs[newMsgs.length - 1];
+            if (lastMsg.senderId !== ctx.userId) {
+              if (!activeChatRoom || activeChatRoom.id !== room.id) {
+                const senderName = getSenderName(lastMsg.senderId, room.host_id);
+                const tag = getTagName(room.child_code);
+                
+                dialog.info(
+                  `💬 Tin nhắn mới từ ${senderName} (${tag})`,
+                  `"${lastMsg.content.substring(0, 40)}${lastMsg.content.length > 40 ? '...' : ''}"`
+                );
+                bridge.haptic('medium');
+              }
+            }
+          }
+        }
+      });
+    }
+    prevRoomsRef.current = rooms;
+  }, [rooms, activeChatRoom, ctx.userId]);
+
+  const hasUnreadMessages = (room) => {
+    if (room.status === 'cancelled' || room.status === 'expired' || !room.chat_group_id) return false;
+    const messages = parseChatMessages(room.chat_group_id);
+    const peerMessages = messages.filter(m => m.senderId !== ctx.userId);
+    if (peerMessages.length === 0) return false;
+    
+    const lastReadTime = localStorage.getItem('chat_read_time_' + room.id);
+    if (!lastReadTime) return true;
+    return peerMessages.some(m => new Date(m.timestamp).getTime() > new Date(lastReadTime).getTime());
+  };
+
+  const hasAnyRoomUnread = useMemo(() => {
+    const userRooms = rooms.filter(room => {
+      const isHost = room.host_id === ctx.userId;
+      const hasJoined = invitations.some(i => i.room_id === room.id && i.receiver_id === ctx.userId && i.status === 'accepted');
+      return isHost || hasJoined;
+    });
+    return userRooms.some(hasUnreadMessages);
+  }, [rooms, invitations, ctx.userId]);
+
   // Host withdraw/cancel with reasons (PRD Section 7.2)
   const handleCancelRoomSubmit = async () => {
     if (!showCancelModal) return;
@@ -2462,7 +2519,23 @@ export default function App() {
           className={`nav-tab-btn ${activeTab === 'rooms' ? 'nav-tab-btn--active' : ''}`}
           onClick={() => setActiveTab('rooms')}
         >
-          <span>🏆</span> Phòng Hẹn
+          <span style={{ position: 'relative', display: 'inline-block' }}>
+            🏆
+            {hasAnyRoomUnread && (
+              <span className="notification-dot" style={{
+                position: 'absolute',
+                top: -3,
+                right: -3,
+                width: 7,
+                height: 7,
+                borderRadius: '50%',
+                background: 'var(--brand)',
+                border: '1.5px solid #fff',
+                boxShadow: '0 1px 3px rgba(230, 57, 70, 0.3)'
+              }} />
+            )}
+          </span>
+          Phòng Hẹn
         </button>
         <button
           className={`nav-tab-btn ${activeTab === 'inbox' ? 'nav-tab-btn--active' : ''}`}
@@ -3348,19 +3421,34 @@ export default function App() {
                           {room.chat_group_id ? (
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                               <span style={{ fontSize: 12, color: '#10B981', fontWeight: 600 }}>💬 Nhóm chat Super App đã sẵn sàng!</span>
-                              <button
-                                className="mushy-btn"
-                                style={{ minHeight: 30, fontSize: 11, padding: '4px 10px', background: '#10B981', color: '#fff' }}
-                                onClick={() => {
-                                  bridge.haptic('light');
-                                  setActiveChatRoom(room);
-                                  if (isInShell()) {
-                                    callNative('OPEN_CHAT_GROUP', { chatGroupId: room.chat_group_id });
-                                  }
-                                }}
-                              >
-                                Vào Chat
-                              </button>
+                              <div style={{ position: 'relative', display: 'inline-block' }}>
+                                <button
+                                  className="mushy-btn"
+                                  style={{ minHeight: 30, fontSize: 11, padding: '4px 10px', background: '#10B981', color: '#fff' }}
+                                  onClick={() => {
+                                    bridge.haptic('light');
+                                    setActiveChatRoom(room);
+                                    if (isInShell()) {
+                                      callNative('OPEN_CHAT_GROUP', { chatGroupId: room.chat_group_id });
+                                    }
+                                  }}
+                                >
+                                  Vào Chat
+                                </button>
+                                {hasUnreadMessages(room) && (
+                                  <span className="notification-dot" style={{
+                                    position: 'absolute',
+                                    top: -4,
+                                    right: -4,
+                                    width: 8,
+                                    height: 8,
+                                    borderRadius: '50%',
+                                    background: 'var(--brand)',
+                                    border: '1.5px solid #fff',
+                                    boxShadow: '0 1px 3px rgba(230, 57, 70, 0.4)'
+                                  }} />
+                                )}
+                              </div>
                             </div>
                           ) : (
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
