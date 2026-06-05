@@ -635,7 +635,7 @@ export default function App() {
       .from('rooms')
       .select('*')
       .eq('workspace_id', activeWs)
-      .order('created_at', { ascending: false });
+      .order('updated_at', { ascending: false });
 
     setRooms(rms || []);
   }
@@ -3354,8 +3354,18 @@ export default function App() {
                   );
                 }
 
-                // Sắp xếp phòng từ mới nhất đến cũ nhất
-                const sortedRooms = [...userRooms].sort((a, b) => new Date(b.created_at || b.scheduled_at) - new Date(a.created_at || a.scheduled_at));
+                // Sắp xếp phòng theo thời gian hoạt động chat/tạo phòng mới nhất lên đầu
+                const sortedRooms = [...userRooms].sort((a, b) => {
+                  const getRoomActivityTime = (r) => {
+                    const messages = parseChatMessages(r.chat_group_id);
+                    if (messages.length > 0) {
+                      const lastMsg = messages[messages.length - 1];
+                      return new Date(lastMsg.timestamp).getTime();
+                    }
+                    return new Date(r.created_at || r.scheduled_at).getTime();
+                  };
+                  return getRoomActivityTime(b) - getRoomActivityTime(a);
+                });
 
                 return sortedRooms.map(room => {
                   const isHost = room.host_id === ctx.userId;
