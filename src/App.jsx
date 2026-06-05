@@ -4094,13 +4094,13 @@ export default function App() {
               {/* Time selection grid */}
               <div style={{ marginBottom: 14 }}>
                 <label className="mushy-label" style={{ fontSize: 11.5 }}>Chọn thời gian rảnh nhanh (Khớp giờ rảnh)</label>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 6 }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
                   {quickTimeOptions.map(opt => (
                     <button
                       key={opt.value}
                       type="button"
                       className={`selectable-chip ${quickInviteTime === opt.value ? 'selectable-chip--selected' : ''}`}
-                      style={{ padding: '6px 12px', fontSize: 11.5, textAlign: 'center', margin: 0 }}
+                      style={{ padding: '6px 12px', fontSize: 11.5, textAlign: 'center', margin: 0, maxWidth: 'none', whiteSpace: 'nowrap' }}
                       onClick={() => { bridge.haptic('light'); setQuickInviteTime(opt.value); }}
                     >
                       {opt.icon} {opt.label}
@@ -4118,7 +4118,7 @@ export default function App() {
                       key={loc}
                       type="button"
                       className={`selectable-chip ${quickInviteLocation === loc ? 'selectable-chip--selected' : ''}`}
-                      style={{ padding: '6px 12px', fontSize: 11.5, margin: 0 }}
+                      style={{ padding: '6px 12px', fontSize: 11.5, margin: 0, maxWidth: 'none', whiteSpace: 'nowrap' }}
                       onClick={() => { bridge.haptic('light'); setQuickInviteLocation(loc); }}
                     >
                       {loc}
