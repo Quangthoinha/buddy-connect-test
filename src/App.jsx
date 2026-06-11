@@ -293,6 +293,17 @@ function getAvatarGradient(char) {
   return gradients[code % gradients.length];
 }
 
+// Helper to parse chat messages from connection request
+function parseChatMessages(chatGroupId) {
+  if (!chatGroupId) return [];
+  try {
+    const parsed = JSON.parse(chatGroupId);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+}
+
 // Premium Skeleton Loader component for smooth visual transition
 function SkeletonScreen() {
   return (
@@ -355,7 +366,7 @@ export default function App() {
   useDefaultScopeInitializer();
 
   // Active navigation tab
-  const [activeTab, setActiveTab] = useState('radar'); // 'radar' | 'rooms' | 'inbox' | 'profile'
+  const [activeTab, setActiveTab] = useState('radar'); // 'radar' | 'inbox' | 'connections' | 'profile'
 
   // Data states
   const [loading, setLoading] = useState(true);
@@ -364,103 +375,68 @@ export default function App() {
     department: '',
     facility: '',
     available_times: [],
+    share_skills: [],
+    learn_skills: [],
+    connect_types: [],
+    is_newbie: false,
+    is_buddy_helper: false,
+    consent_granted_at: null,
   });
   const [myTags, setMyTags] = useState([]); // Selected child_codes
   const [mySkills, setMySkills] = useState([]); // Selected skills
   const [myGoals, setMyGoals] = useState([]); // Selected career goals
+  const [consentGranted, setConsentGranted] = useState(false);
+  const [consentCheckbox, setConsentCheckbox] = useState(false); // for consent form checkbox
+  
+  // Connection states
+  const [connectionRequests, setConnectionRequests] = useState([]);
+  const [connectionMeetings, setConnectionMeetings] = useState([]);
+  const [myPoints, setMyPoints] = useState({ points: 0, confirmed_1to1_count: 0, helper_badge_level: null });
+  const [allPoints, setAllPoints] = useState([]); // for leaderboard
+  const [activeChatConnection, setActiveChatConnection] = useState(null);
+  const [buddyChatInput, setBuddyChatInput] = useState('');
+  
+  // Quick Connect Connection Modal (Bottom Sheet)
+  const [selectedConnectBuddy, setSelectedConnectBuddy] = useState(null); // buddy member object
+  const [showConnectSheet, setShowConnectSheet] = useState(false);
+  const [connectMessage, setConnectMessage] = useState('');
+  
+  // Confirm meeting popup
+  const [showConfirmMeetingId, setShowConfirmMeetingId] = useState(null); // meeting_id to confirm
 
   const [members, setMembers] = useState([]); // Workspace members
   const [allProfiles, setAllProfiles] = useState({}); // user_id -> profile
   const [allUserTags, setAllUserTags] = useState({}); // user_id -> array of child_codes
-  const [rooms, setRooms] = useState([]);
-  const [invitations, setInvitations] = useState([]);
   const [interactionHistory, setInteractionHistory] = useState([]);
 
   // UI Interactivity states
   const [expandedParents, setExpandedParents] = useState({}); // parent_code -> boolean
   const [searchQuery, setSearchQuery] = useState('');
-  const [inviteSearchQuery, setInviteSearchQuery] = useState('');
   const [fallbackEnabled, setFallbackEnabled] = useState(true);
-  const [reconnectingRoomId, setReconnectingRoomId] = useState(null);
-  const [highlightedRoomId, setHighlightedRoomId] = useState(null);
-  const swipeStartX = useRef(0);
-  const swipeStartY = useRef(0);
-  const isSwiping = useRef(false);
-  const hasTriggeredSwipeHaptic = useRef(false);
-  const swipeDirection = useRef(null); // null | 'horizontal' | 'vertical'
-
-
-  // Room Co-creation Form State
-  const [showCreateRoom, setShowCreateRoom] = useState(false);
-  const [newRoom, setNewRoom] = useState({
-    child_code: 'badminton',
-    location: '',
-    scheduled_at: '',
-    max_participants: 2,
-    is_club: false,
-    club_name: '',
-    club_description: ''
-  });
-  const [invitedGuests, setInvitedGuests] = useState([]); // selected guest user_ids
-  const [randomMode, setRandomMode] = useState('mix'); // 'mix' | 'strangers' | 'acquaintances'
-  const [guestSearchQuery, setGuestSearchQuery] = useState(''); // text query to search colleagues
-  const [submittingRoom, setSubmittingRoom] = useState(false);
-  const [quotaMultiplier, setQuotaMultiplier] = useState(3); // default x3 per empty slot
-
-  // Host Withdraw Form state
-  const [showCancelModal, setShowCancelModal] = useState(null); // room object
-  const [cancelReason, setCancelReason] = useState('Bận việc đột xuất');
 
   // Cross-Workspace Sharing states
   const [showSharingModal, setShowSharingModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
 
-  // Quick Invite states
-  const [quickInviteData, setQuickInviteData] = useState(null); // { member, tagCode, tagName }
-  const [quickInviteLocation, setQuickInviteLocation] = useState('Căn tin công ty');
-  const [quickInviteTime, setQuickInviteTime] = useState('');
-  const [submittingQuickInvite, setSubmittingQuickInvite] = useState(false);
-
   const [shareCodeInput, setShareCodeInput] = useState('');
   const [radarPage, setRadarPage] = useState(1);
   const RADAR_PAGE_SIZE = 10;
 
-  const [activeChatRoom, setActiveChatRoom] = useState(null);
-  const [chatInput, setChatInput] = useState('');
   const [avatarTooltip, setAvatarTooltip] = useState(null); // { member, profile } — shown on long-press
-
-  const [hiddenRoomIds, setHiddenRoomIds] = useState([]);
-
-  useEffect(() => {
-    if (ctx.userId) {
-      try {
-        const stored = JSON.parse(localStorage.getItem('hidden_rooms_' + ctx.userId) || '[]');
-        setHiddenRoomIds(stored);
-      } catch (e) {
-        setHiddenRoomIds([]);
-      }
-    }
-  }, [ctx.userId]);
-
-  const handleHideOldRoom = (roomId) => {
-    bridge.haptic('light');
-    const updated = [...hiddenRoomIds, roomId];
-    setHiddenRoomIds(updated);
-    localStorage.setItem('hidden_rooms_' + ctx.userId, JSON.stringify(updated));
-  };
 
   useEffect(() => {
     setRadarPage(1);
   }, [searchQuery, fallbackEnabled, scope]);
 
   useEffect(() => {
-    if (activeChatRoom) {
+    if (activeChatConnection) {
       setTimeout(() => {
         const el = document.getElementById('mushy-chat-messages-container');
         if (el) el.scrollTop = el.scrollHeight;
       }, 50);
     }
-  }, [activeChatRoom, rooms]);
+  }, [activeChatConnection, connectionRequests]);
+
   const [shareGrants, setShareGrants] = useState([]);
   const [generatedCode, setGeneratedCode] = useState(null);
   const [loadingGrants, setLoadingGrants] = useState(false);
@@ -469,41 +445,6 @@ export default function App() {
   const [serverMatchReasons, setServerMatchReasons] = useState({}); // user_id -> string[]
   const [icebreakerMsg, setIcebreakerMsg] = useState('');
   const [loadingIcebreaker, setLoadingIcebreaker] = useState(false);
-
-  // Reputation, Tournaments & Community Feed States
-  const [posts, setPosts] = useState([]);
-  const [postLikes, setPostLikes] = useState([]);
-  const [tournaments, setTournaments] = useState([]);
-  const [tournamentParticipants, setTournamentParticipants] = useState([]);
-  const [reputationHistory, setReputationHistory] = useState([]);
-  
-  const [communityTab, setCommunityTab] = useState('rooms'); // 'rooms' | 'clubs' | 'feed' | 'tournaments' | 'leaderboards'
-  const [newPostContent, setNewPostContent] = useState('');
-  const [newPostRoomId, setNewPostRoomId] = useState('');
-  const [submittingPost, setSubmittingPost] = useState(false);
-
-  const [showCreateTournament, setShowCreateTournament] = useState(false);
-  const [newTournament, setNewTournament] = useState({
-    title: '',
-    description: '',
-    sport_code: 'badminton',
-    target_metric: 'km',
-    target_value: '',
-    start_at: '',
-    end_at: ''
-  });
-  const [submittingTournament, setSubmittingTournament] = useState(false);
-
-  const [showUpdateProgress, setShowUpdateProgress] = useState(null); // tournament object
-  const [progressValue, setProgressValue] = useState('');
-  const [submittingProgress, setSubmittingProgress] = useState(false);
-
-  const [showRollCallModal, setShowRollCallModal] = useState(null); // room object
-  const [rollCallAttended, setRollCallAttended] = useState([]);
-  const [rollCallNoShow, setRollCallNoShow] = useState([]);
-  const [submittingRollCall, setSubmittingRollCall] = useState(false);
-
-  const [selectedTournamentId, setSelectedTournamentId] = useState('');
 
   // 1. Fetch all data on mount and scope changes
   useEffect(() => {
@@ -516,43 +457,25 @@ export default function App() {
   useEffect(() => {
     if (!scope?.workspaceId) return;
 
-    // Listen to rooms changes (realtime matching and slot indicators)
-    const unsubRooms = subscribeToTable('rooms', scope.workspaceId, () => {
-      loadRoomsData();
+    // Listen to connection requests
+    const unsubConnReqs = subscribeToTable('connection_requests', scope.workspaceId, () => {
+      loadConnectionData();
     });
 
-    // Listen to invitations (accepted counts, expiring list)
-    const unsubInvs = subscribeToTable('invitations', scope.workspaceId, () => {
-      loadInvitationsData();
+    // Listen to connection meetings
+    const unsubConnMeets = subscribeToTable('connection_meetings', scope.workspaceId, () => {
+      loadConnectionData();
     });
 
-    // Listen to community posts
-    const unsubPosts = subscribeToTable('community_posts', scope.workspaceId, () => {
-      loadCommunityData();
-    });
-
-    // Listen to post likes
-    const unsubLikes = subscribeToTable('post_likes', scope.workspaceId, () => {
-      loadCommunityData();
-    });
-
-    // Listen to tournaments
-    const unsubTournaments = subscribeToTable('tournaments', scope.workspaceId, () => {
-      loadCommunityData();
-    });
-
-    // Listen to tournament participants
-    const unsubParticipants = subscribeToTable('tournament_participants', scope.workspaceId, () => {
-      loadCommunityData();
+    // Listen to connection points
+    const unsubConnPoints = subscribeToTable('connection_points', scope.workspaceId, () => {
+      loadConnectionData();
     });
 
     return () => {
-      unsubRooms();
-      unsubInvs();
-      unsubPosts();
-      unsubLikes();
-      unsubTournaments();
-      unsubParticipants();
+      unsubConnReqs();
+      unsubConnMeets();
+      unsubConnPoints();
     };
   }, [scope?.workspaceId]);
 
@@ -568,47 +491,7 @@ export default function App() {
       const activeWs = scope.workspaceId;
       if (!activeWs) return;
 
-      // Run lazy daemon to clean up expired rooms
-      await runLazyExpiryDaemon(activeWs);
 
-      // Auto-initialize database tags taxonomy if missing for this workspace
-      // (Required for production/staging workspaces that haven't been manually seeded!)
-      try {
-        const { error: checkTagsErr, count } = await db
-          .from('tags')
-          .select('child_code', { count: 'exact', head: true })
-          .eq('workspace_id', activeWs);
-
-        if (checkTagsErr) {
-          console.error('Lỗi kiểm tra tags danh mục:', checkTagsErr);
-        }
-
-        if (!checkTagsErr && (count === null || count < 200)) {
-          console.log('⚡ Taxonomy missing or incomplete. Auto-seeding/upserting 200 tags...');
-          const tagsToInsert = [];
-          TAXONOMY.forEach(parent => {
-            parent.children.forEach(child => {
-              tagsToInsert.push({
-                workspace_id: activeWs,
-                parent_code: parent.parent_code,
-                parent_name: parent.parent_name,
-                child_code: child.code,
-                name: child.name
-              });
-            });
-          });
-          
-          const { error: seedErr } = await db.from('tags').upsert(tagsToInsert, { onConflict: 'workspace_id,child_code' });
-          if (seedErr) {
-            console.error('Lỗi tự động seed tags:', seedErr);
-            dialog.error('Lỗi khởi tạo danh mục', `Không thể ghi danh mục sở thích: ${seedErr.message} (Code: ${seedErr.code})`);
-          } else {
-            console.log('✓ Tự động seed 200 tags thành công cho workspace!');
-          }
-        }
-      } catch (checkErr) {
-        console.warn('Lỗi kiểm tra/seeding tags:', checkErr);
-      }
 
       // 1. Fetch current user profile
       const { data: prof, error: profErr } = await db
@@ -623,22 +506,20 @@ export default function App() {
           department: prof.department || '',
           facility: prof.facility || '',
           available_times: prof.available_times || [],
-          reputation_score: prof.reputation_score ?? 100,
+          share_skills: prof.share_skills || [],
+          learn_skills: prof.learn_skills || [],
+          connect_types: prof.connect_types || [],
+          is_newbie: !!prof.is_newbie,
+          is_buddy_helper: !!prof.is_buddy_helper,
+          consent_granted_at: prof.consent_granted_at || null,
         });
         setMySkills(prof.skills || []);
         setMyGoals(prof.career_goals || []);
         setHasProfile(true);
-
-        // Fetch my user_tags
-        const { data: tags } = await db
-          .from('user_tags')
-          .select('child_code')
-          .eq('workspace_id', activeWs)
-          .eq('user_id', ctx.userId);
-        setMyTags((tags || []).map(t => t.child_code));
+        setConsentGranted(!!prof.consent_granted_at);
       } else {
         setHasProfile(false);
-        setShowProfileModal(true); // Force setup profile modal if empty
+        setConsentGranted(false);
       }
 
       // 2. Fetch workspace members
@@ -676,10 +557,8 @@ export default function App() {
         .eq('workspace_id', activeWs);
       setInteractionHistory(history || []);
 
-      // 5. Load Rooms & Invitations
-      await loadRoomsData();
-      await loadInvitationsData();
-      await loadCommunityData();
+      // 5. Load Connection Data
+      await loadConnectionData();
 
       // 6. Load server-side match reasons (non-blocking)
       loadServerMatchReasons();
@@ -691,127 +570,72 @@ export default function App() {
     }
   }
 
-  async function loadRoomsData() {
+  async function loadConnectionData() {
     const activeWs = scope.workspaceId;
     if (!activeWs) return;
 
-    const { data: rms } = await db
-      .from('rooms')
-      .select('*')
-      .eq('workspace_id', activeWs)
-      .order('updated_at', { ascending: false });
-
-    setRooms(rms || []);
-  }
-
-  async function loadInvitationsData() {
-    const activeWs = scope.workspaceId;
-    if (!activeWs) return;
-
-    const { data: invs } = await db
-      .from('invitations')
-      .select('*')
-      .eq('workspace_id', activeWs);
-
-    setInvitations(invs || []);
-  }
-
-  async function loadCommunityData() {
-    const activeWs = scope.workspaceId;
-    if (!activeWs) return;
     try {
-      const { data: pst } = await db
-        .from('community_posts')
+      // 1. Fetch connection requests involving the current user
+      const { data: requests, error: reqErr } = await db
+        .from('connection_requests')
+        .select('*')
+        .eq('workspace_id', activeWs)
+        .or(`from_user_id.eq.${ctx.userId},to_user_id.eq.${ctx.userId}`)
+        .order('created_at', { ascending: false });
+
+      if (reqErr) {
+        console.error('Error fetching connection requests:', reqErr);
+      } else {
+        setConnectionRequests(requests || []);
+      }
+
+      // 2. Fetch connection meetings for active workspace
+      const { data: meetings, error: meetErr } = await db
+        .from('connection_meetings')
         .select('*')
         .eq('workspace_id', activeWs)
         .order('created_at', { ascending: false });
-      setPosts(pst || []);
 
-      const { data: lks } = await db
-        .from('post_likes')
-        .select('*')
-        .eq('workspace_id', activeWs);
-      setPostLikes(lks || []);
+      if (meetErr) {
+        console.error('Error fetching connection meetings:', meetErr);
+      } else {
+        setConnectionMeetings(meetings || []);
+      }
 
-      const { data: trn } = await db
-        .from('tournaments')
-        .select('*')
-        .eq('workspace_id', activeWs)
-        .order('created_at', { ascending: false });
-      setTournaments(trn || []);
-
-      const { data: prt } = await db
-        .from('tournament_participants')
-        .select('*')
-        .eq('workspace_id', activeWs);
-      setTournamentParticipants(prt || []);
-
-      const { data: hist } = await db
-        .from('reputation_history')
+      // 3. Fetch current user points
+      const { data: pts, error: ptsErr } = await db
+        .from('connection_points')
         .select('*')
         .eq('workspace_id', activeWs)
         .eq('user_id', ctx.userId)
-        .order('created_at', { ascending: false });
-      setReputationHistory(hist || []);
-    } catch (e) {
-      console.warn('Lỗi tải dữ liệu cộng đồng:', e);
-    }
-  }
+        .maybeSingle();
 
-  // 8.1 Expiry Daemon: Client-side lazy sweep
-  async function runLazyExpiryDaemon(activeWs) {
-    try {
-      const nowStr = new Date().toISOString();
-      // Fetch open or filling rooms in the past
-      const { data: expiredRooms } = await db
-        .from('rooms')
-        .select('id')
-        .eq('workspace_id', activeWs)
-        .in('status', ['open', 'filling'])
-        .lt('scheduled_at', nowStr);
-
-      if (expiredRooms && expiredRooms.length > 0) {
-        const roomIds = expiredRooms.map(r => r.id);
-        console.log('Lazy daemon detected expired rooms:', roomIds);
-
-        // Update rooms status
-        await db
-          .from('rooms')
-          .update({ status: 'expired', updated_at: nowStr })
-          .in('id', roomIds);
-
-        // Update all pending invitations for these rooms to expired
-        await db
-          .from('invitations')
-          .update({ status: 'expired', updated_at: nowStr })
-          .in('room_id', roomIds)
-          .eq('status', 'pending');
+      if (ptsErr) {
+        console.error('Error fetching user connection points:', ptsErr);
+      } else if (pts) {
+        setMyPoints({
+          points: pts.points || 0,
+          confirmed_1to1_count: pts.confirmed_1to1_count || 0,
+          helper_badge_level: pts.helper_badge_level || null
+        });
+      } else {
+        setMyPoints({ points: 0, confirmed_1to1_count: 0, helper_badge_level: null });
       }
 
-      // Delete/clear mock chat logs for rooms scheduled more than 1 week ago
-      const oneWeekAgo = new Date();
-      oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-      const oneWeekAgoStr = oneWeekAgo.toISOString();
-
-      const { data: oldRoomsChatToClean } = await db
-        .from('rooms')
-        .select('id')
+      // 4. Fetch all points in workspace for leaderboard
+      const { data: allPts, error: allPtsErr } = await db
+        .from('connection_points')
+        .select('*')
         .eq('workspace_id', activeWs)
-        .eq('is_club', false)
-        .lt('scheduled_at', oneWeekAgoStr)
-        .not('chat_group_id', 'is', null);
+        .order('points', { ascending: false });
 
-      if (oldRoomsChatToClean && oldRoomsChatToClean.length > 0) {
-        const oldRoomIds = oldRoomsChatToClean.map(r => r.id);
-        console.log('Lazy daemon cleaning old chat histories (> 1 week) for rooms:', oldRoomIds);
-
-        await db
-          .from('rooms')
-          .update({ chat_group_id: null, updated_at: nowStr })
-          .in('id', oldRoomIds);
+      if (allPtsErr) {
+        console.error('Error fetching leaderboard points:', allPtsErr);
+      } else {
+        setAllPoints(allPts || []);
       }
-    } catch (e) {
-      console.warn('Lỗi lazy daemon sweep:', e);
+    } catch (err) {
+      console.warn('Lỗi tải dữ liệu Connection:', err);
     }
   }
 
@@ -881,6 +705,11 @@ export default function App() {
         available_times: myProfile.available_times,
         skills: mySkills,
         career_goals: myGoals,
+        share_skills: myProfile.share_skills || [],
+        learn_skills: myProfile.learn_skills || [],
+        connect_types: myProfile.connect_types || [],
+        is_newbie: !!myProfile.is_newbie,
+        is_buddy_helper: !!myProfile.is_buddy_helper,
         updated_at: new Date().toISOString()
       });
       if (profErr) throw profErr;
@@ -907,124 +736,377 @@ export default function App() {
     }
   };
 
-  // --- Quick Invite helper options & handlers ---
-  const quickTimeOptions = useMemo(() => {
-    const now = new Date();
-    const options = [];
-    
-    // 1. Trưa nay / trưa mai (12:00)
-    const lunch = new Date(now);
-    lunch.setHours(12, 0, 0, 0);
-    if (lunch.getTime() < now.getTime()) {
-      lunch.setDate(lunch.getDate() + 1);
-      options.push({ label: 'Trưa mai (12:00)', value: lunch.toISOString(), icon: '🍲' });
-    } else {
-      options.push({ label: 'Trưa nay (12:00)', value: lunch.toISOString(), icon: '🍲' });
-    }
-
-    // 2. Chiều nay / chiều mai (17:30)
-    const evening = new Date(now);
-    evening.setHours(17, 30, 0, 0);
-    if (evening.getTime() < now.getTime()) {
-      evening.setDate(evening.getDate() + 1);
-      options.push({ label: 'Chiều mai (17:30)', value: evening.toISOString(), icon: '🏸' });
-    } else {
-      options.push({ label: 'Chiều nay (17:30)', value: evening.toISOString(), icon: '🏸' });
-    }
-
-    // 3. Tối nay / tối mai (19:30)
-    const night = new Date(now);
-    night.setHours(19, 30, 0, 0);
-    if (night.getTime() < now.getTime()) {
-      night.setDate(night.getDate() + 1);
-      options.push({ label: 'Tối mai (19:30)', value: night.toISOString(), icon: '☕' });
-    } else {
-      options.push({ label: 'Tối nay (19:30)', value: night.toISOString(), icon: '☕' });
-    }
-
-    // 4. Sáng mai (08:30)
-    const morning = new Date(now);
-    morning.setDate(morning.getDate() + 1);
-    morning.setHours(8, 30, 0, 0);
-    options.push({ label: 'Sáng mai (08:30)', value: morning.toISOString(), icon: '🏃' });
-
-    return options;
-  }, [quickInviteData]);
-
-  const handleQuickInviteSubmit = async () => {
-    if (!quickInviteTime) {
-      return dialog.error('Thiếu thông tin', 'Vui lòng chọn thời gian hẹn nhanh!');
-    }
-
-    setSubmittingQuickInvite(true);
+  const handleGrantConsent = async () => {
     try {
       bridge.haptic('medium');
       const activeWs = scope.workspaceId;
+      if (!activeWs) return;
 
-      // 1. Create a room instantly
-      const { data: room, error: roomErr } = await db
-        .from('rooms')
+      const consentTime = new Date().toISOString();
+
+      const { data: existingProf } = await db
+        .from('user_profiles')
+        .select('*')
+        .eq('workspace_id', activeWs)
+        .eq('user_id', ctx.userId)
+        .maybeSingle();
+
+      if (existingProf) {
+        const { error: consentErr } = await db
+          .from('user_profiles')
+          .update({ consent_granted_at: consentTime, updated_at: consentTime })
+          .eq('workspace_id', activeWs)
+          .eq('user_id', ctx.userId);
+        if (consentErr) throw consentErr;
+      } else {
+        const { error: consentErr } = await db
+          .from('user_profiles')
+          .insert({
+            user_id: ctx.userId,
+            workspace_id: activeWs,
+            consent_granted_at: consentTime,
+            updated_at: consentTime,
+            department: '',
+            facility: '',
+            available_times: [],
+            share_skills: [],
+            learn_skills: [],
+            connect_types: [],
+            is_newbie: false,
+            is_buddy_helper: false,
+          });
+        if (consentErr) throw consentErr;
+      }
+
+      setConsentGranted(true);
+      setMyProfile(prev => ({ ...prev, consent_granted_at: consentTime }));
+      await dialog.success('Xác nhận thành công!', 'Bạn đã đồng ý với các điều khoản chia sẻ dữ liệu và kết nối.');
+      
+      // If user profile details are not fully set up yet, show the setup modal.
+      if (!existingProf || !existingProf.department || !existingProf.facility) {
+        setShowProfileModal(true);
+      }
+      
+      loadData();
+    } catch (e) {
+      dialog.error('Lỗi xác nhận', e.message);
+    }
+  };
+
+  const getConnectTypeLabel = (type) => {
+    switch (type) {
+      case 'food': return 'Ăn uống 🍴';
+      case 'sport': return 'Thể thao ⚽';
+      case 'knowledge': return 'Tri thức 📖';
+      case 'casual': return 'Tán gẫu 💬';
+      case 'intro_meet': return 'Làm quen 🤝';
+      default: return 'Kết nối';
+    }
+  };
+
+  const handleSendConnectionRequest = async (buddyId, actionType, messageTemplate) => {
+    try {
+      bridge.haptic('medium');
+      const activeWs = scope.workspaceId;
+      if (!activeWs) return;
+
+      // Check if there is already a pending connection request of the same type between these users
+      const { data: existing } = await db
+        .from('connection_requests')
+        .select('*')
+        .eq('workspace_id', activeWs)
+        .eq('from_user_id', ctx.userId)
+        .eq('to_user_id', buddyId)
+        .eq('action_type', actionType)
+        .eq('status', 'pending')
+        .maybeSingle();
+
+      if (existing) {
+        return dialog.error('Yêu cầu đã tồn tại', `Bạn đã gửi một yêu cầu kết nối "${getConnectTypeLabel(actionType)}" tới đồng nghiệp này và đang chờ phản hồi.`);
+      }
+
+      // Generate a mock chat_group_id as serialized JSON array [] if mock mode is used.
+      const chatGroupId = JSON.stringify([]);
+
+      // Insert connection request
+      const { data: newReq, error: insertErr } = await db
+        .from('connection_requests')
         .insert({
           workspace_id: activeWs,
-          host_id: ctx.userId,
-          child_code: quickInviteData.tagCode,
-          location: quickInviteLocation,
-          scheduled_at: quickInviteTime,
-          max_participants: 2,
-          status: 'filling',
+          from_user_id: ctx.userId,
+          to_user_id: buddyId,
+          action_type: actionType,
+          status: 'pending',
+          message_template: messageTemplate || '',
+          chat_group_id: chatGroupId,
+          created_at: new Date().toISOString()
         })
         .select()
         .single();
 
-      if (roomErr) throw roomErr;
+      if (insertErr) throw insertErr;
 
-      // 2. Send invitation to the selected colleague
-      const { error: invErr } = await db.from('invitations').insert({
-        workspace_id: activeWs,
-        room_id: room.id,
-        receiver_id: quickInviteData.member.user_id,
-        status: 'pending',
-      });
-
-      if (invErr) throw invErr;
-
-      // 4. Push remote native notification if in app
+      // Push notification
       try {
-        const tagName = FLAT_TAGS.find(t => t.code === quickInviteData.tagCode)?.name || 'gặp gỡ';
+        const typeLabel = getConnectTypeLabel(actionType);
         await mushyApi.push({
           workspaceId: activeWs,
           appSlug: 'buddy-connect',
-          userIds: [quickInviteData.member.user_id],
-          title: '⚡ Lập kèo nhanh!',
-          body: `${ctx.userFullName || 'Đồng nghiệp'} đã rủ bạn cùng tham gia hoạt động "${tagName}" lúc ${quickInviteLocation} vào lúc ${new Date(quickInviteTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}. Mở app để nhận lời ngay!`,
+          userIds: [buddyId],
+          title: '⚡ Lời mời kết nối mới!',
+          body: `${ctx.userFullName || 'Một đồng nghiệp'} đã gửi lời mời kết nối "${typeLabel}" tới bạn. Mở app để xem ngay!`,
         });
       } catch (pushErr) {
         console.warn('Lỗi push notification:', pushErr);
       }
 
-      setQuickInviteData(null);
-      await dialog.success('Đã gửi lời mời!', `Lập kèo nhanh thành công! Lời mời tham gia "${quickInviteData.tagName}" đã được gửi tới ${quickInviteData.member.full_name}.`);
-      
-      // Reload lists
-      loadData();
+      await dialog.success('Đã gửi yêu cầu!', 'Lời mời kết nối của bạn đã được gửi thành công.');
+      setShowConnectSheet(false);
+      setSelectedConnectBuddy(null);
+      loadConnectionData();
     } catch (e) {
-      dialog.error('Lỗi lập kèo nhanh', e.message);
-    } finally {
-      setSubmittingQuickInvite(false);
+      dialog.error('Lỗi gửi yêu cầu', e.message);
     }
   };
 
+  const handleRespondRequest = async (requestId, status) => {
+    try {
+      bridge.haptic('medium');
+      const activeWs = scope.workspaceId;
+      if (!activeWs) return;
+
+      const now = new Date().toISOString();
+
+      const { data: updatedReq, error: updateErr } = await db
+        .from('connection_requests')
+        .update({ status, resolved_at: now })
+        .eq('id', requestId)
+        .select()
+        .single();
+
+      if (updateErr) throw updateErr;
+
+      if (status === 'accepted') {
+        // Automatically create a connection meeting record
+        const { error: meetErr } = await db
+          .from('connection_meetings')
+          .insert({
+            workspace_id: activeWs,
+            request_id: requestId,
+            from_confirmed: false,
+            to_confirmed: false,
+            points_awarded: 0,
+            status: 'pending_confirmation',
+            created_at: now
+          });
+        if (meetErr) throw meetErr;
+
+        // Push notification to the sender
+        try {
+          await mushyApi.push({
+            workspaceId: activeWs,
+            appSlug: 'buddy-connect',
+            userIds: [updatedReq.from_user_id],
+            title: '🎉 Lời mời đã được chấp nhận!',
+            body: `${ctx.userFullName || 'Đồng nghiệp'} đã đồng ý kết nối với bạn. Hãy lên lịch gặp mặt ngoài đời nhé!`,
+          });
+        } catch (pushErr) {
+          console.warn('Lỗi push notification:', pushErr);
+        }
+
+        await dialog.success('Đã chấp nhận!', 'Bạn đã đồng ý kết nối. Cuộc gặp mặt đã được lập lịch xác nhận.');
+      } else {
+        await dialog.info('Đã từ chối', 'Bạn đã từ chối yêu cầu kết nối.');
+      }
+
+      loadConnectionData();
+    } catch (e) {
+      dialog.error('Lỗi phản hồi yêu cầu', e.message);
+    }
+  };
+
+  const awardConnectionPoints = async (userId, pointsToAdd) => {
+    const activeWs = scope.workspaceId;
+    if (!activeWs) return;
+
+    try {
+      // Get existing points
+      const { data: existing } = await db
+        .from('connection_points')
+        .select('*')
+        .eq('workspace_id', activeWs)
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      const now = new Date().toISOString();
+
+      if (existing) {
+        const newPoints = (existing.points || 0) + pointsToAdd;
+        const newCount = (existing.confirmed_1to1_count || 0) + 1;
+        
+        let badge = null;
+        if (newPoints >= 100) badge = 'gold';
+        else if (newPoints >= 60) badge = 'silver';
+        else if (newPoints >= 30) badge = 'bronze';
+
+        await db
+          .from('connection_points')
+          .update({
+            points: newPoints,
+            confirmed_1to1_count: newCount,
+            helper_badge_level: badge,
+            updated_at: now
+          })
+          .eq('workspace_id', activeWs)
+          .eq('user_id', userId);
+      } else {
+        let badge = null;
+        if (pointsToAdd >= 100) badge = 'gold';
+        else if (pointsToAdd >= 60) badge = 'silver';
+        else if (pointsToAdd >= 30) badge = 'bronze';
+
+        await db
+          .from('connection_points')
+          .insert({
+            workspace_id: activeWs,
+            user_id: userId,
+            points: pointsToAdd,
+            confirmed_1to1_count: 1,
+            group_activity_count: 0,
+            helper_badge_level: badge,
+            updated_at: now
+          });
+      }
+    } catch (err) {
+      console.error('Error awarding connection points:', err);
+    }
+  };
+
+  const handleConfirmMeeting = async (meetingId, isConfirmed) => {
+    try {
+      bridge.haptic('medium');
+      const activeWs = scope.workspaceId;
+      if (!activeWs) return;
+
+      // Fetch meeting and corresponding request to know from/to users
+      const { data: meeting, error: meetErr } = await db
+        .from('connection_meetings')
+        .select('*, request:connection_requests(*)')
+        .eq('id', meetingId)
+        .single();
+
+      if (meetErr || !meeting) {
+        throw new Error('Không tìm thấy bản ghi cuộc gặp.');
+      }
+
+      const request = meeting.request;
+      if (!request) {
+        throw new Error('Không tìm thấy yêu cầu kết nối liên quan.');
+      }
+
+      const isFrom = ctx.userId === request.from_user_id;
+      const isTo = ctx.userId === request.to_user_id;
+
+      if (!isFrom && !isTo) {
+        throw new Error('Bạn không tham gia vào cuộc kết nối này.');
+      }
+
+      const updates = {};
+      if (isConfirmed === 'confirmed') {
+        if (isFrom) updates.from_confirmed = true;
+        if (isTo) updates.to_confirmed = true;
+
+        // Check if both are now confirmed
+        const bothConfirmed = (isFrom && meeting.to_confirmed) || (isTo && meeting.from_confirmed);
+        if (bothConfirmed) {
+          updates.status = 'confirmed';
+          updates.confirmed_at = new Date().toISOString();
+          updates.points_awarded = 10;
+
+          // Award points to both
+          await awardConnectionPoints(request.from_user_id, 10);
+          await awardConnectionPoints(request.to_user_id, 10);
+        } else {
+          updates.status = 'pending_confirmation';
+        }
+      } else if (isConfirmed === 'skipped') {
+        updates.status = 'skipped';
+      }
+
+      const { error: updateErr } = await db
+        .from('connection_meetings')
+        .update(updates)
+        .eq('id', meetingId);
+
+      if (updateErr) throw updateErr;
+
+      if (updates.status === 'confirmed') {
+        await dialog.success('Tuyệt vời! 🎉', 'Cuộc gặp mặt đã được xác nhận từ cả hai phía. Mỗi bạn được cộng 10 điểm kết nối.');
+      } else if (isConfirmed === 'confirmed') {
+        await dialog.success('Đã xác nhận!', 'Đã ghi nhận xác nhận từ phía bạn. Đang chờ đồng nghiệp xác nhận.');
+      } else {
+        await dialog.info('Đã hủy cuộc gặp', 'Trạng thái cuộc gặp được cập nhật thành Bỏ qua.');
+      }
+
+      loadConnectionData();
+    } catch (e) {
+      dialog.error('Lỗi xác nhận cuộc gặp', e.message);
+    }
+  };
+
+  const handleSendChatMessageForBuddy = async (requestId, content) => {
+    if (!content.trim()) return;
+    const req = connectionRequests.find(r => r.id === requestId);
+    if (!req) return;
+
+    const currentMessages = parseChatMessages(req.chat_group_id);
+    const newMessage = {
+      id: `msg-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      senderId: ctx.userId,
+      content: content.trim(),
+      timestamp: new Date().toISOString()
+    };
+    const updatedMessages = [...currentMessages, newMessage];
+    const newChatGroupId = JSON.stringify(updatedMessages);
+
+    try {
+      await db
+        .from('connection_requests')
+        .update({ chat_group_id: newChatGroupId })
+        .eq('id', requestId);
+    } catch (e) {
+      console.error('Failed to send buddy chat message:', e);
+    }
+  };
+
+
+
   // --- Smart Matching & Sorting Priority Logic (PRD Section 5) ---
+  const helperNewbieCounts = useMemo(() => {
+    const counts = {};
+    connectionRequests.forEach(req => {
+      if (req.status === 'pending' || req.status === 'accepted') {
+        const senderProfile = allProfiles[req.from_user_id];
+        if (senderProfile && senderProfile.is_newbie) {
+          counts[req.to_user_id] = (counts[req.to_user_id] || 0) + 1;
+        }
+      }
+    });
+    return counts;
+  }, [connectionRequests, allProfiles]);
+
   const rankedCandidates = useMemo(() => {
     if (!hasProfile) return [];
 
-    const myProfileData = allProfiles[ctx.userId] || {};
     const myInterests = myTags || [];
     const q = searchQuery.trim().toLowerCase();
 
     return members
       .map(member => {
         const profile = allProfiles[member.user_id] || {};
+        // Compliance: skip candidates who have not granted onboarding consent
+        if (!profile.consent_granted_at) return null;
+
         const tags = allUserTags[member.user_id] || [];
 
         // Apply search query filter if present
@@ -1089,14 +1171,35 @@ export default function App() {
         matchScore += exactMatchCount * 25;
         matchScore += sharedParents.length * 10;
         if (profile.facility === myProfile.facility) matchScore += 15; // same office bonus
-        
-        // Reputation score bonus: if reputation score >= 120, award 10% match score bonus
-        const repScore = profile.reputation_score ?? 100;
-        if (repScore >= 120) {
-          matchScore += 10;
+
+        // expansion boosters
+        if (myProfile.is_newbie && profile.is_buddy_helper) {
+          matchScore += 30;
         }
-        
-        if (matchScore > 99) matchScore = 99; // Cap at 99%
+
+        const commonConnectTypes = (myProfile.connect_types || []).filter(ct => (profile.connect_types || []).includes(ct));
+        if (commonConnectTypes.length > 0) {
+          matchScore += 15;
+        }
+
+        const myShare = myProfile.share_skills || [];
+        const myLearn = myProfile.learn_skills || [];
+        const theirShare = profile.share_skills || [];
+        const theirLearn = profile.learn_skills || [];
+        const hasKnowledgeOverlap = 
+          myShare.some(s => theirLearn.includes(s)) || 
+          myLearn.some(s => theirShare.includes(s));
+        if (hasKnowledgeOverlap) {
+          matchScore += 20;
+        }
+
+        const pendingNewbies = helperNewbieCounts[member.user_id] || 0;
+        if (profile.is_buddy_helper && pendingNewbies >= 3) {
+          matchScore -= 15;
+        }
+
+        if (matchScore > 100) matchScore = 100;
+        if (matchScore < 0) matchScore = 0;
 
         return {
           member,
@@ -1118,1485 +1221,25 @@ export default function App() {
         // Secondarily sort by higher match score
         return b.matchScore - a.matchScore;
       });
-  }, [members, allProfiles, allUserTags, myTags, myProfile, interactionHistory, fallbackEnabled, hasProfile, searchQuery]);
+  }, [members, allProfiles, allUserTags, myTags, myProfile, interactionHistory, fallbackEnabled, hasProfile, searchQuery, helperNewbieCounts]);
 
-  // --- Room Management Handlers ---
+  const newbiePrimaryBuddy = useMemo(() => {
+    if (!hasProfile || !myProfile.is_newbie) return null;
 
-  // 6.2 Outbound Rate Quota Calculation
-  const getOutboundLimit = (room) => {
-    const acceptedCount = invitations.filter(i => i.room_id === room.id && i.status === 'accepted').length;
-    const peopleJoined = acceptedCount + 1; // Host + accepted guests
-    const slotsRemaining = room.max_participants - peopleJoined;
-    return slotsRemaining * 3;
-  };
-
-  const getPendingInvitationsCount = (roomId) => {
-    return invitations.filter(i => i.room_id === roomId && i.status === 'pending').length;
-  };
-
-  // Schedule Clash Detection Helper
-  const checkScheduleClash = (scheduledTimeStr) => {
-    const targetTime = new Date(scheduledTimeStr).getTime();
-    const safetyWindow = 1.5 * 60 * 60 * 1000; // 1.5 hours in ms
-
-    // Find any room that Guest has accepted (invitation status = accepted) OR hosting (host_id = userId)
-    // where scheduled_at is within +/- 1.5 hours
-    const clashingRooms = rooms.filter(room => {
-      if (room.status === 'cancelled' || room.status === 'expired') return false;
-
-      const roomTime = new Date(room.scheduled_at).getTime();
-      const isClashing = Math.abs(roomTime - targetTime) < safetyWindow;
-      if (!isClashing) return false;
-
-      const isHost = room.host_id === ctx.userId;
-      const isAcceptedGuest = invitations.some(i => i.room_id === room.id && i.receiver_id === ctx.userId && i.status === 'accepted');
-
-      return isHost || isAcceptedGuest;
+    // Filter candidates who are buddy helpers, have consented, and are not overloaded (less than 3 pending/accepted newbie connections)
+    const candidates = rankedCandidates.filter(c => {
+      const isHelper = c.profile.is_buddy_helper;
+      const hasConsent = c.profile.consent_granted_at;
+      const pendingNewbies = helperNewbieCounts[c.member.user_id] || 0;
+      const notOverloaded = pendingNewbies < 3;
+      return isHelper && hasConsent && notOverloaded;
     });
 
-    return clashingRooms[0] || null;
-  };
+    if (candidates.length === 0) return null;
+    return candidates[0]; // Top matching buddy helper
+  }, [rankedCandidates, myProfile, hasProfile, helperNewbieCounts]);
 
-  // Derived state for cascading selectors in room creation
-  const selectedParentCode = useMemo(() => {
-    const matched = FLAT_TAGS.find(t => t.code === newRoom.child_code);
-    return matched ? matched.parent_code : TAXONOMY[0].parent_code;
-  }, [newRoom.child_code]);
 
-  const availableChildOptions = useMemo(() => {
-    const parent = TAXONOMY.find(p => p.parent_code === selectedParentCode);
-    return parent ? parent.children.map(c => ({ value: c.code, label: c.name })) : [];
-  }, [selectedParentCode]);
-
-  // Derived matching members for the selected tag during room creation
-  const matchingTagMembers = useMemo(() => {
-    if (!newRoom.child_code) return [];
-    return members.filter(m => {
-      const tags = allUserTags[m.user_id] || [];
-      return tags.includes(newRoom.child_code);
-    });
-  }, [newRoom.child_code, members, allUserTags]);
-
-  // Derived outbound limit during room creation
-  const createRoomAllowedLimit = useMemo(() => {
-    const maxParticipants = parseInt(newRoom.max_participants) || 2;
-    return (maxParticipants - 1) * quotaMultiplier;
-  }, [newRoom.max_participants, quotaMultiplier]);
-
-  // Partition members into matching-tag and non-matching-tag lists for categorized creation display, supporting search and relationship filters
-  const sortedMembersForCreate = useMemo(() => {
-    const matching = [];
-    const others = [];
-    const q = guestSearchQuery.trim().toLowerCase();
-
-    members.forEach(m => {
-      // 1. Name query filter
-      if (q && !m.full_name.toLowerCase().includes(q)) return;
-
-      // 2. Relationship mix filter
-      const hasInteracted = interactionHistory.some(h => 
-        (h.user_id_1 === ctx.userId && h.user_id_2 === m.user_id) ||
-        (h.user_id_1 === m.user_id && h.user_id_2 === ctx.userId)
-      );
-
-      if (randomMode === 'acquaintances' && !hasInteracted) return;
-      if (randomMode === 'strangers' && hasInteracted) return;
-
-      const tags = allUserTags[m.user_id] || [];
-      if (tags.includes(newRoom.child_code)) {
-        matching.push({ member: m, hasInteracted });
-      } else {
-        others.push({ member: m, hasInteracted });
-      }
-    });
-    return { matching, others };
-  }, [members, allUserTags, newRoom.child_code, guestSearchQuery, randomMode, interactionHistory, ctx.userId]);
-
-  const handleParentChange = (parentCode) => {
-    const parent = TAXONOMY.find(p => p.parent_code === parentCode);
-    if (parent && parent.children.length > 0) {
-      setNewRoom(prev => ({ ...prev, child_code: parent.children[0].code }));
-    }
-  };
-
-  const handleSelectAllMatchingTagMembers = () => {
-    bridge.haptic('light');
-    if (matchingTagMembers.length === 0) return;
-
-    const toSelect = matchingTagMembers.slice(0, createRoomAllowedLimit);
-    setInvitedGuests(toSelect.map(m => m.user_id));
-
-    if (matchingTagMembers.length > createRoomAllowedLimit) {
-      dialog.info(
-        'Đã chọn giới hạn',
-        `Chỉ có thể mời tối đa ${createRoomAllowedLimit} người (hạn ngạch pending của phòng sỹ số ${newRoom.max_participants} là ${createRoomAllowedLimit}). Đã tự động chọn ${createRoomAllowedLimit} người đầu tiên trùng sở thích.`
-      );
-    } else {
-      dialog.success(
-        'Đã chọn tất cả',
-        `Đã chọn toàn bộ ${toSelect.length} người có chung sở thích!`
-      );
-    }
-  };
-
-  const setQuickTime = (type) => {
-    bridge.haptic('light');
-    const now = new Date();
-    let target = new Date();
-
-    if (type === 'today_19') {
-      target.setHours(19, 0, 0, 0);
-      if (target.getTime() < now.getTime()) target.setDate(target.getDate() + 1);
-    } else if (type === 'today_20') {
-      target.setHours(20, 0, 0, 0);
-      if (target.getTime() < now.getTime()) target.setDate(target.getDate() + 1);
-    } else if (type === 'tomorrow_8') {
-      target.setDate(target.getDate() + 1);
-      target.setHours(8, 0, 0, 0);
-    } else if (type === 'tomorrow_17') {
-      target.setDate(target.getDate() + 1);
-      target.setHours(17, 0, 0, 0);
-    } else if (type === 'weekend_9') {
-      const day = now.getDay();
-      const daysUntilSaturday = day === 6 ? 7 : (6 - day);
-      target.setDate(target.getDate() + daysUntilSaturday);
-      target.setHours(9, 0, 0, 0);
-    }
-
-    const year = target.getFullYear();
-    const month = String(target.getMonth() + 1).padStart(2, '0');
-    const date = String(target.getDate()).padStart(2, '0');
-    const hours = String(target.getHours()).padStart(2, '0');
-    const minutes = String(target.getMinutes()).padStart(2, '0');
-
-    setNewRoom(prev => ({ ...prev, scheduled_at: `${year}-${month}-${date}T${hours}:${minutes}` }));
-  };
-
-  const handleSelectRandomGuests = (type, count) => {
-    bridge.haptic('light');
-
-    // Check remaining available slots
-    const available = createRoomAllowedLimit - invitedGuests.length;
-    if (available <= 0) {
-      return dialog.info('Hạn ngạch đã đầy', `Bạn đã chọn đủ số lượng lời mời tối đa cho phép (${createRoomAllowedLimit} người).`);
-    }
-
-    let pool = [];
-
-    // 1. Initial filter based on tag preference
-    if (type === 'same_tag') {
-      pool = members.filter(m => {
-        const tags = allUserTags[m.user_id] || [];
-        return tags.includes(newRoom.child_code);
-      });
-    } else {
-      pool = members;
-    }
-
-    // Exclude guests who are already invited/selected
-    pool = pool.filter(m => !invitedGuests.includes(m.user_id));
-
-    // 2. Secondary filter based on relationship profile history (stranger vs acquaintance)
-    pool = pool.filter(m => {
-      const hasInteracted = interactionHistory.some(h => 
-        (h.user_id_1 === ctx.userId && h.user_id_2 === m.user_id) ||
-        (h.user_id_1 === m.user_id && h.user_id_2 === ctx.userId)
-      );
-
-      if (randomMode === 'acquaintances') return hasInteracted;
-      if (randomMode === 'strangers') return !hasInteracted;
-      return true; // 'mix' mode
-    });
-
-    if (pool.length === 0) {
-      let modeName = randomMode === 'acquaintances' ? 'người quen' : 'người lạ';
-      if (randomMode === 'mix') modeName = 'thành viên';
-      return dialog.info('Không tìm thấy', `Không tìm thấy đồng nghiệp nào chưa được chọn trong nhóm "${modeName}" để ghép.`);
-    }
-
-    // 3. Shuffle pool and apply limits
-    const shuffled = [...pool].sort(() => 0.5 - Math.random());
-    const limit = Math.min(shuffled.length, count, available);
-    if (limit === 0) {
-      let modeName = randomMode === 'acquaintances' ? 'người quen' : 'người lạ';
-      if (randomMode === 'mix') modeName = 'thành viên';
-      return dialog.info('Không tìm thấy', `Không tìm thấy đồng nghiệp nào chưa được chọn trong nhóm "${modeName}" để ghép thêm.`);
-    }
-    const selected = shuffled.slice(0, limit);
-
-    setInvitedGuests(prev => [...prev, ...selected.map(m => m.user_id)]);
-    const namesStr = selected.map(m => m.full_name).join(', ');
-    dialog.success(
-      'Đã chọn ngẫu nhiên',
-      `Đã chọn thêm ${selected.length} đồng nghiệp (${randomMode === 'mix' ? 'lạ/quen mix' : randomMode === 'strangers' ? 'chỉ người lạ' : 'chỉ người quen'}) vào danh sách mời:\n\n${namesStr}`
-    );
-  };
-
-  // Co-creation validation & submit
-  const handleCreateRoomSubmit = async (e) => {
-    e.preventDefault();
-
-    const isClub = !!newRoom.is_club;
-
-    if (isClub) {
-      if (!newRoom.club_name?.trim()) {
-        return dialog.error('Thiếu thông tin', 'Vui lòng nhập tên câu lạc bộ.');
-      }
-      if (!newRoom.location?.trim()) {
-        return dialog.error('Thiếu thông tin', 'Vui lòng nhập khu vực hoạt động.');
-      }
-    } else {
-      if (!newRoom.location.trim() || !newRoom.scheduled_at) {
-        return dialog.error('Thiếu thông tin', 'Vui lòng nhập vị trí và chọn thời gian hẹn.');
-      }
-    }
-
-    const maxParticipants = isClub ? 9999 : parseInt(newRoom.max_participants);
-    if (!isClub && (!maxParticipants || maxParticipants < 2)) {
-      return dialog.error('Sĩ số không hợp lệ', 'Sĩ số tối đa phải từ 2 người trở lên.');
-    }
-
-    // 4.1 Co-creation requirement: must select at least 1 guest for room
-    if (!isClub && invitedGuests.length === 0) {
-      return dialog.error('Ràng buộc tạo phòng', 'Hệ thống bắt buộc Host phải chọn ít nhất 1 người để gửi lời mời đầu tiên thì mới cho phép tạo phòng, tránh phòng mồ côi!');
-    }
-
-    if (!isClub && invitedGuests.length > createRoomAllowedLimit) {
-      return dialog.error('Vượt quá hạn ngạch', `Số người được mời (${invitedGuests.length}) vượt quá số lượng pending tối đa cho phép (${createRoomAllowedLimit}) cho phòng này.`);
-    }
-
-    setSubmittingRoom(true);
-    try {
-      const activeWs = scope.workspaceId;
-      const nowStr = new Date().toISOString();
-
-      // Check if Host has a schedule clash
-      if (!isClub) {
-        const clash = checkScheduleClash(newRoom.scheduled_at);
-        if (clash) {
-          setSubmittingRoom(false);
-          const ok = await dialog.confirm(
-            'Phát hiện trùng lịch trình!',
-            `Bạn đã có lịch tham gia hoặc host kèo "${clash.location}" vào lúc ${formatTime(clash.scheduled_at)}. Bạn có chắc chắn muốn tiếp tục tạo kèo mới này không?`,
-            { danger: true, confirmLabel: 'Tạo Kèo Mới', cancelLabel: 'Hủy' }
-          );
-          if (!ok) return;
-          setSubmittingRoom(true);
-        }
-      }
-
-      // 1. Create Room/Club
-      const { data: room, error: roomErr } = await db
-        .from('rooms')
-        .insert({
-          workspace_id: activeWs,
-          host_id: ctx.userId,
-          child_code: newRoom.child_code,
-          location: newRoom.location.trim(),
-          scheduled_at: isClub ? null : new Date(newRoom.scheduled_at).toISOString(),
-          max_participants: maxParticipants,
-          status: 'open',
-          is_club: isClub,
-          club_name: isClub ? newRoom.club_name.trim() : null,
-          club_description: isClub ? newRoom.club_description.trim() : null,
-          version: 1
-        })
-        .select()
-        .single();
-
-      if (roomErr) throw roomErr;
-
-      // 2. Dispatch Invitations
-      if (invitedGuests.length > 0) {
-        const invitationsPayload = invitedGuests.map(receiverId => ({
-          workspace_id: activeWs,
-          room_id: room.id,
-          receiver_id: receiverId,
-          status: isClub ? 'accepted' : 'pending'
-        }));
-
-        const { error: invsErr } = await db.from('invitations').insert(invitationsPayload);
-        if (invsErr) throw invsErr;
-      }
-
-      // 3. Reset form
-      setShowCreateRoom(false);
-      setInvitedGuests([]);
-      setNewRoom({
-        child_code: 'badminton',
-        location: '',
-        scheduled_at: '',
-        max_participants: 2,
-        is_club: false,
-        club_name: '',
-        club_description: ''
-      });
-
-      bridge.haptic('success');
-      await dialog.success(isClub ? 'Tạo câu lạc bộ thành công!' : 'Tạo phòng thành công!', isClub ? 'CLB đã được thành lập và hoạt động lâu dài.' : 'Phòng hẹn đã được khởi tạo và phát đi các lời mời đầu tiên.');
-      loadData();
-
-      // Super App Push Notification
-      try {
-        await mushyApi.push({
-          title: `🍄 Lời mời Connect mới!`,
-          body: `Bạn được mời tham gia kèo: "${room.location}".`,
-          userIds: invitedGuests,
-          data: { appSlug: 'buddy-connect', screen: 'inbox' }
-        });
-      } catch (err) {
-        console.warn('Push error:', err);
-      }
-
-    } catch (e) {
-      dialog.error('Lỗi tạo phòng', e.message);
-    } finally {
-      setSubmittingRoom(false);
-    }
-  };
-
-  // 6.3 Schedule Clash & Accept Invitation Handler
-  const handleAcceptInvitation = async (inv) => {
-    try {
-      bridge.haptic('light');
-      const activeWs = scope.workspaceId;
-      
-
-      const room = rooms.find(r => r.id === inv.room_id);
-      if (!room) return;
-
-      // Fetch latest state of the room to prevent race condition
-      const { data: latestRoom } = await db
-        .from('rooms')
-        .select('*')
-        .eq('id', room.id)
-        .single();
-
-      if (!latestRoom || latestRoom.status === 'matched' || latestRoom.status === 'expired' || latestRoom.status === 'cancelled') {
-        return dialog.error('Không thể tham gia', 'Rất tiếc, phòng hẹn đã đủ thành viên hoặc không còn khả dụng.');
-      }
-
-      // Schedule clash check
-      const clash = checkScheduleClash(room.scheduled_at);
-      if (clash) {
-        const confirmSwitch = await dialog.confirm(
-          'Đụng độ lịch trình!',
-          `Bạn đã có lịch tham gia kèo khác vào khung giờ này (${formatTime(clash.scheduled_at)}). Bạn có chắc chắn muốn rút lui khỏi kèo cũ để tham gia kèo mới này không?`,
-          { danger: true, confirmLabel: 'Đồng ý Đổi Kèo', cancelLabel: 'Giữ Kèo Cũ' }
-        );
-
-        if (!confirmSwitch) return;
-
-        // Auto withdraw from the clashing old room
-        if (clash.host_id === ctx.userId) {
-          // Optimistic local state update: cancel the old room
-          setRooms(prev => prev.map(r => r.id === clash.id ? { ...r, status: 'cancelled' } : r));
-
-          // If you are the Host of the old room, you must cancel it
-          await db
-            .from('rooms')
-            .update({ status: 'cancelled', cancel_reason: 'Host chuyển sang kèo khác', updated_at: new Date().toISOString() })
-            .eq('id', clash.id);
-        } else {
-          // Count remaining guests to calculate new status for the old room
-          const remainingGuests = invitations.filter(i => i.room_id === clash.id && i.status === 'accepted' && i.receiver_id !== ctx.userId).length;
-          const nextClashRoomStatus = remainingGuests === 0 ? 'open' : 'filling';
-
-          // Optimistic local state update: old invitation -> declined, old room status -> open/filling
-          setInvitations(prev => prev.map(i => (i.room_id === clash.id && i.receiver_id === ctx.userId && i.status === 'accepted') ? { ...i, status: 'declined', updated_at: new Date().toISOString() } : i));
-          setRooms(prev => prev.map(r => r.id === clash.id ? { ...r, status: nextClashRoomStatus } : r));
-
-          // If you are a Guest in the old room, change old invitation to declined
-          await db
-            .from('invitations')
-            .update({ status: 'declined', updated_at: new Date().toISOString() })
-            .eq('room_id', clash.id)
-            .eq('receiver_id', ctx.userId)
-            .eq('status', 'accepted');
-
-          // Update the old room's status in DB
-          await db
-            .from('rooms')
-            .update({ status: nextClashRoomStatus, updated_at: new Date().toISOString() })
-            .eq('id', clash.id);
-
-          // Update native chat group with new participant list (if any guests remain)
-          if (nextClashRoomStatus === 'filling') {
-            await createRoomNativeChat(clash.id, clash.location);
-          }
-        }
-      }
-
-      // 6.1 Multi-Participant Accept logic
-      // Lock room with optimistic locking via version increment
-      const nextVersion = latestRoom.version + 1;
-      const { data: updatedRoom, error: updateErr } = await db
-        .from('rooms')
-        .update({ version: nextVersion, updated_at: new Date().toISOString() })
-        .eq('id', room.id)
-        .eq('version', latestRoom.version)
-        .select()
-        .single();
-
-      if (updateErr || !updatedRoom) {
-        // Race condition: someone else accepted first
-        return dialog.error('Tranh chấp slot', 'Phòng vừa mới được lấp đầy hoặc trạng thái đã thay đổi. Vui lòng thử kèo khác nhé!');
-      }
-
-      // Accept current invitation
-      await db
-        .from('invitations')
-        .update({ status: 'accepted', updated_at: new Date().toISOString() })
-        .eq('id', inv.id);
-
-      // Recalculate participant counts
-      const currentAccepted = invitations.filter(i => i.room_id === room.id && i.status === 'accepted').length + 1; // including the new acceptance
-      const totalParticipants = currentAccepted + 1; // + Host
-
-      if (totalParticipants >= room.max_participants) {
-        // 6.1 Lock the room, set to matched and expire other pending invitations
-        await db
-          .from('rooms')
-          .update({ status: 'matched', updated_at: new Date().toISOString() })
-          .eq('id', room.id);
-
-        await db
-          .from('invitations')
-          .update({ status: 'expired', updated_at: new Date().toISOString() })
-          .eq('room_id', room.id)
-          .eq('status', 'pending');
-
-        // Add symmetric interactions between all participants to interaction_history
-        await recordInteractionHistory(room.id, room.host_id);
-
-        // 7.1 Native chat creation via JS Bridge
-        await createRoomNativeChat(room.id, room.location);
-      } else {
-        // Update to filling state
-        await db
-          .from('rooms')
-          .update({ status: 'filling', updated_at: new Date().toISOString() })
-          .eq('id', room.id);
-
-        // 7.1 Native chat creation via JS Bridge (even when filling)
-        await createRoomNativeChat(room.id, room.location);
-      }
-
-      // Optimistic updates
-      setInvitations(prev => prev.map(i => i.id === inv.id ? { ...i, status: 'accepted' } : i));
-      if (room) {
-        const nextStatus = (invitations.filter(i => i.room_id === room.id && i.status === 'accepted').length + 2 >= room.max_participants) ? 'matched' : 'filling';
-        setRooms(prev => prev.map(r => r.id === room.id ? { ...r, status: nextStatus } : r));
-      }
-
-      bridge.haptic('success');
-      await loadData(true); // Silent background refresh!
-
-      // Optimistically redirect to the 'community' tab and trigger a premium highlight glow
-      setHighlightedRoomId(room.id);
-      setActiveTab('community');
-      setCommunityTab(room.is_club ? 'clubs' : 'rooms');
-
-      // Allow DOM rendering of the tab switcher, then scroll the accepted room card into center view smoothly
-      setTimeout(() => {
-        const roomEl = document.getElementById(`room-card-${room.id}`);
-        if (roomEl) {
-          roomEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-      }, 350);
-
-      // Fade out the crimson highlighting border after 3.5 seconds
-      setTimeout(() => {
-        setHighlightedRoomId(null);
-      }, 3850);
-    } catch (e) {
-      dialog.error('Lỗi khi chấp nhận', e.message);
-    }
-  };
-
-  // Record symmetric connection chéo history (PRD Section 3)
-  const recordInteractionHistory = async (roomId, hostId) => {
-    try {
-      const activeWs = scope.workspaceId;
-      // Get all accepted participants in this room
-      const { data: accInvs } = await db
-        .from('invitations')
-        .select('receiver_id')
-        .eq('room_id', roomId)
-        .eq('status', 'accepted');
-
-      if (!accInvs) return;
-
-      const participantIds = [hostId, ...accInvs.map(i => i.receiver_id)];
-
-      // Build symmetric pairs: always store user_id_1 < user_id_2
-      const historyPayload = [];
-      for (let i = 0; i < participantIds.length; i++) {
-        for (let j = i + 1; j < participantIds.length; j++) {
-          const id1 = participantIds[i] < participantIds[j] ? participantIds[i] : participantIds[j];
-          const id2 = participantIds[i] < participantIds[j] ? participantIds[j] : participantIds[i];
-
-          historyPayload.push({
-            workspace_id: activeWs,
-            user_id_1: id1,
-            user_id_2: id2
-          });
-        }
-      }
-
-      if (historyPayload.length > 0) {
-        // Use upsert to avoid duplicate key errors
-        await db.from('interaction_history').upsert(historyPayload);
-      }
-    } catch (e) {
-      console.warn('Lỗi ghi chép lịch sử tương tác:', e);
-    }
-  };
-
-  // Native chat group generator (PRD Section 7)
-  const createRoomNativeChat = async (roomId, roomLocation) => {
-    try {
-      const activeWs = scope.workspaceId;
-      if (!activeWs) return;
-
-      // Fetch the latest room state from DB to ensure absolute accuracy and avoid stale React state
-      const { data: room, error: roomDbErr } = await db
-        .from('rooms')
-        .select('*')
-        .eq('id', roomId)
-        .single();
-
-      if (roomDbErr || !room) {
-        console.error('Không tìm thấy phòng hẹn khi khởi tạo nhóm chat:', roomDbErr);
-        return;
-      }
-
-      // Fetch latest accepted participants directly from DB to prevent React async state lag
-      const { data: dbInvs } = await db
-        .from('invitations')
-        .select('receiver_id')
-        .eq('room_id', roomId)
-        .eq('status', 'accepted');
-
-      const accGuests = dbInvs ? dbInvs.map(i => i.receiver_id) : [];
-      const participantIds = [room.host_id, ...accGuests];
-
-      // Call Native Shell Bridge with fallback support
-      let chatGroupId;
-      try {
-        const nativeChatResult = await callNative('CREATE_CHAT_GROUP', {
-          title: `💬 Connect Room: ${roomLocation.substring(0, 20)}`,
-          userIds: participantIds
-        });
-        chatGroupId = nativeChatResult?.chatGroupId;
-      } catch (bridgeErr) {
-        console.warn('Lỗi Native Shell CREATE_CHAT_GROUP, sử dụng fallback ID.', bridgeErr);
-      }
-
-      if (!chatGroupId) {
-        // Fallback to mock: preserve existing chat_group_id/mock messages to prevent reset
-        if (room.chat_group_id) {
-          chatGroupId = room.chat_group_id;
-        } else {
-          chatGroupId = `mock-chat-${Math.random().toString(36).substring(2, 9)}`;
-        }
-      }
-
-      // Update room in DB
-      await db
-        .from('rooms')
-        .update({ chat_group_id: chatGroupId, updated_at: new Date().toISOString() })
-        .eq('id', roomId);
-
-      console.log('✓ Khởi tạo nhóm chat thành công:', chatGroupId);
-    } catch (e) {
-      console.error('Lỗi khởi tạo nhóm chat:', e);
-    }
-  };
-
-  // 7.1 Distributed Fault-Tolerance reconnection trigger
-  const handleReconnectChat = async (room) => {
-    if (reconnectingRoomId) return;
-    bridge.haptic('light');
-    setReconnectingRoomId(room.id);
-    try {
-      await createRoomNativeChat(room.id, room.location);
-      await loadData(true); // Silent background refresh!
-      dialog.success('Kết nối thành công!', 'Nhóm chat chéo của phòng hẹn đã được kết nối lại thành công.');
-    } catch (err) {
-      console.error('Lỗi khi kết nối lại nhóm chat:', err);
-      dialog.error('Lỗi kết nối lại', 'Không thể kết nối lại nhóm chat. Vui lòng thử lại sau.');
-    } finally {
-      setReconnectingRoomId(null);
-    }
-  };
-
-  const parseChatMessages = (chatGroupId) => {
-    try {
-      if (!chatGroupId) return [];
-      if (chatGroupId.startsWith('[') && chatGroupId.endsWith(']')) {
-        return JSON.parse(chatGroupId);
-      }
-    } catch (e) {
-      console.warn('Failed to parse chat messages from chat_group_id:', e);
-    }
-    return [];
-  };
-
-  const getSenderName = (senderId, hostId) => {
-    if (senderId === ctx.userId) return 'Bạn';
-    if (senderId === hostId) return 'Host';
-    const member = members.find(m => m.user_id === senderId);
-    return member ? member.full_name : 'Đồng nghiệp';
-  };
-
-  const handleSendChatMessage = async (room, content) => {
-    if (!content.trim()) return;
-    const currentMessages = parseChatMessages(room.chat_group_id);
-    const newMessage = {
-      id: `msg-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      senderId: ctx.userId,
-      content: content.trim(),
-      timestamp: new Date().toISOString()
-    };
-    const updatedMessages = [...currentMessages, newMessage];
-    const newChatGroupId = JSON.stringify(updatedMessages);
-
-    try {
-      await db
-        .from('rooms')
-        .update({ chat_group_id: newChatGroupId, updated_at: new Date().toISOString() })
-        .eq('id', room.id);
-    } catch (e) {
-      console.error('Failed to send chat message:', e);
-    }
-  };
-
-  // --- CHAT UNREAD & NOTIFICATION ENGINE ---
-  const prevRoomsRef = useRef([]);
-
-  useEffect(() => {
-    if (activeChatRoom) {
-      localStorage.setItem('chat_read_time_' + activeChatRoom.id, new Date().toISOString());
-    }
-  }, [activeChatRoom, rooms]);
-
-  useEffect(() => {
-    if (prevRoomsRef.current && prevRoomsRef.current.length > 0) {
-      rooms.forEach(room => {
-        const oldRoom = prevRoomsRef.current.find(r => r.id === room.id);
-        if (oldRoom) {
-          const newMsgs = parseChatMessages(room.chat_group_id);
-          const oldMsgs = parseChatMessages(oldRoom.chat_group_id);
-          if (newMsgs.length > oldMsgs.length) {
-            const lastMsg = newMsgs[newMsgs.length - 1];
-            if (lastMsg.senderId !== ctx.userId) {
-              if (!activeChatRoom || activeChatRoom.id !== room.id) {
-                const senderName = getSenderName(lastMsg.senderId, room.host_id);
-                const tag = getTagName(room.child_code);
-                
-                dialog.info(
-                  `💬 Tin nhắn mới từ ${senderName} (${tag})`,
-                  `"${lastMsg.content.substring(0, 40)}${lastMsg.content.length > 40 ? '...' : ''}"`
-                );
-                bridge.haptic('medium');
-              }
-            }
-          }
-        }
-      });
-    }
-    prevRoomsRef.current = rooms;
-  }, [rooms, activeChatRoom, ctx.userId]);
-
-  const hasUnreadMessages = (room) => {
-    if (room.status === 'cancelled' || room.status === 'expired' || !room.chat_group_id) return false;
-    const messages = parseChatMessages(room.chat_group_id);
-    const peerMessages = messages.filter(m => m.senderId !== ctx.userId);
-    if (peerMessages.length === 0) return false;
-    
-    const lastReadTime = localStorage.getItem('chat_read_time_' + room.id);
-    if (!lastReadTime) return true;
-    return peerMessages.some(m => new Date(m.timestamp).getTime() > new Date(lastReadTime).getTime());
-  };
-
-  const hasAnyRoomUnread = useMemo(() => {
-    const userRooms = rooms.filter(room => {
-      const isHost = room.host_id === ctx.userId;
-      const hasJoined = invitations.some(i => i.room_id === room.id && i.receiver_id === ctx.userId && i.status === 'accepted');
-      return isHost || hasJoined;
-    });
-    return userRooms.some(hasUnreadMessages);
-  }, [rooms, invitations, ctx.userId]);
-
-  // Host withdraw/cancel with reasons (PRD Section 7.2)
-  const handleCancelRoomSubmit = async () => {
-    if (!showCancelModal) return;
-
-    try {
-      bridge.haptic('medium');
-      const room = showCancelModal;
-      const activeWs = scope.workspaceId;
-      const nowStr = new Date().toISOString();
-
-      // 1. Update room status to cancelled
-      await db
-        .from('rooms')
-        .update({
-          status: 'cancelled',
-          cancel_reason: cancelReason,
-          updated_at: nowStr
-        })
-        .eq('id', room.id);
-
-      // Check for late cancellation (less than 2 hours before scheduled time)
-      const hoursToEvent = (new Date(room.scheduled_at) - new Date()) / (1000 * 60 * 60);
-      if (hoursToEvent <= 2) {
-        // Fetch host profile score
-        const { data: prof } = await db
-          .from('user_profiles')
-          .select('reputation_score')
-          .eq('workspace_id', activeWs)
-          .eq('user_id', ctx.userId)
-          .maybeSingle();
-          
-        const currentScore = prof?.reputation_score ?? 100;
-        const newScore = Math.max(0, currentScore - 10);
-        
-        // Update user profile reputation score
-        await db
-          .from('user_profiles')
-          .update({ reputation_score: newScore, updated_at: nowStr })
-          .eq('workspace_id', activeWs)
-          .eq('user_id', ctx.userId);
-          
-        // Log to history
-        await db
-          .from('reputation_history')
-          .insert({
-            workspace_id: activeWs,
-            user_id: ctx.userId,
-            points_change: -10,
-            reason: `Hủy kèo sát giờ (dưới 2 tiếng): ${getTagName(room.child_code)} tại ${room.location}`
-          });
-          
-        setMyProfile(prev => ({ ...prev, reputation_score: newScore }));
-      }
-
-      // 2. Set pending/accepted invitations to declined/expired
-      await db
-        .from('invitations')
-        .update({ status: 'declined', updated_at: nowStr })
-        .eq('room_id', room.id);
-
-      // 3. Send distributed native chat announcement message via bridge
-      if (room.chat_group_id) {
-        const cancelMsg = `🚨 Thông báo: Host đã hủy kèo đi chill này với lý do: "[Lý do Host nhập: ${cancelReason}]". Nhóm chat sẽ đóng lại tại đây. Hẹn gặp mọi người ở các kèo sau nhé 🍄.`;
-        try {
-          await callNative('SEND_CHAT_MESSAGE', {
-            chatGroupId: room.chat_group_id,
-            message: cancelMsg
-          });
-          // Transition group to Read-only
-          await callNative('LOCK_CHAT_GROUP_READONLY', {
-            chatGroupId: room.chat_group_id
-          });
-        } catch (bridgeErr) {
-          console.warn('Không gửi được tin nhắn bù do bridge lỗi:', bridgeErr);
-        }
-      }
-
-      setShowCancelModal(null);
-      // Optimistic update
-      setRooms(prev => prev.map(r => r.id === room.id ? { ...r, status: 'cancelled' } : r));
-      setInvitations(prev => prev.map(i => i.room_id === room.id ? { ...i, status: 'declined' } : i));
-
-      await dialog.success('Đã hủy phòng hẹn', 'Hệ thống đã đóng phòng và gửi thông báo văn minh đến các thành viên.');
-      await loadData(true); // Silent background refresh!
-    } catch (e) {
-      dialog.error('Lỗi hủy phòng', e.message);
-    }
-  };
-
-  const handleSelfCheckIn = async (room) => {
-    try {
-      bridge.haptic('medium');
-      const activeWs = scope.workspaceId;
-      const nowStr = new Date().toISOString();
-
-      if ((room.checked_in_users || []).includes(ctx.userId)) {
-        return dialog.info('Đã check-in', 'Bạn đã thực hiện check-in cho phòng hẹn này rồi.');
-      }
-
-      const updatedCheckedIn = [...(room.checked_in_users || []), ctx.userId];
-
-      const { error: roomErr } = await db
-        .from('rooms')
-        .update({
-          checked_in_users: updatedCheckedIn,
-          updated_at: nowStr
-        })
-        .eq('id', room.id);
-
-      if (roomErr) throw roomErr;
-
-      const { data: prof } = await db
-        .from('user_profiles')
-        .select('reputation_score')
-        .eq('workspace_id', activeWs)
-        .eq('user_id', ctx.userId)
-        .maybeSingle();
-
-      const currentScore = prof?.reputation_score ?? 100;
-      const newScore = currentScore + 5;
-
-      await db
-        .from('user_profiles')
-        .update({ reputation_score: newScore, updated_at: nowStr })
-        .eq('workspace_id', activeWs)
-        .eq('user_id', ctx.userId);
-
-      await db
-        .from('reputation_history')
-        .insert({
-          workspace_id: activeWs,
-          user_id: ctx.userId,
-          points_change: 5,
-          reason: `Tự check-in đi chill đúng giờ: ${getTagName(room.child_code)} tại ${room.location}`
-        });
-
-      setRooms(prev => prev.map(r => r.id === room.id ? { ...r, checked_in_users: updatedCheckedIn } : r));
-      setMyProfile(prev => ({ ...prev, reputation_score: newScore }));
-
-      dialog.success('Check-in thành công!', 'Bạn đã tích lũy thêm +5 điểm uy tín 🌟.');
-      loadData(true);
-    } catch (e) {
-      dialog.error('Lỗi check-in', e.message);
-    }
-  };
-
-  const handleRollCallSubmit = async () => {
-    if (!showRollCallModal) return;
-    try {
-      setSubmittingRollCall(true);
-      bridge.haptic('medium');
-      const room = showRollCallModal;
-      const activeWs = scope.workspaceId;
-      const nowStr = new Date().toISOString();
-
-      const roomInvs = invitations.filter(i => i.room_id === room.id && i.status === 'accepted');
-      const allParticipantsIds = [room.host_id, ...roomInvs.map(i => i.receiver_id)];
-
-      const { error: roomErr } = await db
-        .from('rooms')
-        .update({
-          checked_in_users: rollCallAttended,
-          no_shows: rollCallNoShow,
-          roll_call_done: true,
-          updated_at: nowStr
-        })
-        .eq('id', room.id);
-
-      if (roomErr) throw roomErr;
-
-      for (const uId of allParticipantsIds) {
-        const attended = rollCallAttended.includes(uId);
-        const noshow = rollCallNoShow.includes(uId);
-
-        const { data: prof } = await db
-          .from('user_profiles')
-          .select('reputation_score')
-          .eq('workspace_id', activeWs)
-          .eq('user_id', uId)
-          .maybeSingle();
-
-        const currentScore = prof?.reputation_score ?? 100;
-        let pointsChange = 0;
-        let reason = '';
-
-        if (attended) {
-          const alreadyCheckedIn = (room.checked_in_users || []).includes(uId);
-          if (!alreadyCheckedIn) {
-            pointsChange = 5;
-            reason = `Host điểm danh đi đúng giờ: ${getTagName(room.child_code)} tại ${room.location}`;
-          }
-        } else if (noshow) {
-          const alreadyNoShow = (room.no_shows || []).includes(uId);
-          if (!alreadyNoShow) {
-            pointsChange = -15;
-            reason = `Bùng kèo (No-show) phòng hẹn: ${getTagName(room.child_code)} tại ${room.location}`;
-          }
-        }
-
-        if (pointsChange !== 0) {
-          const newScore = Math.max(0, currentScore + pointsChange);
-          
-          await db
-            .from('user_profiles')
-            .update({ reputation_score: newScore, updated_at: nowStr })
-            .eq('workspace_id', activeWs)
-            .eq('user_id', uId);
-
-          await db
-            .from('reputation_history')
-            .insert({
-              workspace_id: activeWs,
-              user_id: uId,
-              points_change: pointsChange,
-              reason: reason
-            });
-            
-          if (uId === ctx.userId) {
-            setMyProfile(prev => ({ ...prev, reputation_score: newScore }));
-          }
-        }
-      }
-
-      setRooms(prev => prev.map(r => r.id === room.id ? { 
-        ...r, 
-        checked_in_users: rollCallAttended,
-        no_shows: rollCallNoShow,
-        roll_call_done: true
-      } : r));
-
-      setShowRollCallModal(null);
-      dialog.success('Điểm danh thành công', 'Điểm uy tín đã được cập nhật cho các thành viên.');
-      loadData(true);
-    } catch (e) {
-      dialog.error('Lỗi điểm danh', e.message);
-    } finally {
-      setSubmittingRollCall(false);
-    }
-  };
-
-  const handleCreatePostSubmit = async (e) => {
-    e.preventDefault();
-    if (!newPostContent.trim()) return;
-    try {
-      setSubmittingPost(true);
-      bridge.haptic('light');
-      const activeWs = scope.workspaceId;
-      
-      const { error } = await db
-        .from('community_posts')
-        .insert({
-          workspace_id: activeWs,
-          user_id: ctx.userId,
-          content: newPostContent.trim(),
-          room_id: newPostRoomId || null
-        });
-
-      if (error) throw error;
-      setNewPostContent('');
-      setNewPostRoomId('');
-      await loadCommunityData();
-    } catch (err) {
-      dialog.error('Lỗi đăng bài', err.message);
-    } finally {
-      setSubmittingPost(false);
-    }
-  };
-
-  const handleLikePost = async (postId) => {
-    try {
-      bridge.haptic('light');
-      const activeWs = scope.workspaceId;
-      const alreadyLiked = postLikes.some(l => l.post_id === postId && l.user_id === ctx.userId);
-
-      if (alreadyLiked) {
-        await db
-          .from('post_likes')
-          .delete()
-          .eq('workspace_id', activeWs)
-          .eq('post_id', postId)
-          .eq('user_id', ctx.userId);
-      } else {
-        await db
-          .from('post_likes')
-          .insert({
-            workspace_id: activeWs,
-            post_id: postId,
-            user_id: ctx.userId
-          });
-      }
-      await loadCommunityData();
-    } catch (err) {
-      console.error('Error liking post:', err);
-    }
-  };
-
-  const handleCreateTournamentSubmit = async (e) => {
-    e.preventDefault();
-    if (!newTournament.title.trim() || !newTournament.target_value || !newTournament.start_at || !newTournament.end_at) {
-      return dialog.error('Thiếu thông tin', 'Vui lòng nhập đầy đủ thông tin giải đấu!');
-    }
-    try {
-      setSubmittingTournament(true);
-      bridge.haptic('light');
-      const activeWs = scope.workspaceId;
-
-      const { error } = await db
-        .from('tournaments')
-        .insert({
-          workspace_id: activeWs,
-          creator_id: ctx.userId,
-          title: newTournament.title.trim(),
-          description: newTournament.description?.trim() || null,
-          sport_code: newTournament.sport_code,
-          target_metric: newTournament.target_metric,
-          target_value: parseInt(newTournament.target_value, 10),
-          start_at: new Date(newTournament.start_at).toISOString(),
-          end_at: new Date(newTournament.end_at).toISOString(),
-          status: 'active'
-        });
-
-      if (error) throw error;
-      setShowCreateTournament(false);
-      setNewTournament({
-        title: '',
-        description: '',
-        sport_code: 'badminton',
-        target_metric: 'km',
-        target_value: '',
-        start_at: '',
-        end_at: ''
-      });
-      await loadCommunityData();
-      dialog.success('Tạo giải đấu thành công!', 'Mọi người trong workspace hiện có thể tham gia và thi đấu.');
-    } catch (err) {
-      dialog.error('Lỗi tạo giải đấu', err.message);
-    } finally {
-      setSubmittingTournament(false);
-    }
-  };
-
-  const handleJoinTournament = async (tournamentId) => {
-    try {
-      bridge.haptic('light');
-      const activeWs = scope.workspaceId;
-
-      const { error } = await db
-        .from('tournament_participants')
-        .insert({
-          workspace_id: activeWs,
-          tournament_id: tournamentId,
-          user_id: ctx.userId,
-          current_value: 0
-        });
-
-      if (error) throw error;
-      await loadCommunityData();
-      dialog.success('Đã tham gia!', 'Hãy bắt đầu thi đấu và cập nhật thành tích nhé.');
-    } catch (err) {
-      dialog.error('Lỗi tham gia giải đấu', err.message);
-    }
-  };
-
-  const handleUpdateProgressSubmit = async (e) => {
-    e.preventDefault();
-    if (!showUpdateProgress) return;
-    const val = parseInt(progressValue, 10);
-    if (isNaN(val) || val <= 0) return dialog.error('Sai giá trị', 'Vui lòng nhập số dương!');
-    try {
-      setSubmittingProgress(true);
-      bridge.haptic('light');
-      const activeWs = scope.workspaceId;
-      const tournament = showUpdateProgress;
-
-      const currentPart = tournamentParticipants.find(p => p.tournament_id === tournament.id && p.user_id === ctx.userId);
-      const newValue = (currentPart?.current_value || 0) + val;
-
-      const { error } = await db
-        .from('tournament_participants')
-        .upsert({
-          workspace_id: activeWs,
-          tournament_id: tournament.id,
-          user_id: ctx.userId,
-          current_value: newValue
-        });
-
-      if (error) throw error;
-      setShowUpdateProgress(null);
-      setProgressValue('');
-      await loadCommunityData();
-      dialog.success('Cập nhật thành công!', `Thành tích của bạn đã được cộng thêm +${val} ${tournament.target_metric}.`);
-    } catch (err) {
-      dialog.error('Lỗi cập nhật', err.message);
-    } finally {
-      setSubmittingProgress(false);
-    }
-  };
-
-  const handleDeclineInvitation = async (inv) => {
-    try {
-      bridge.haptic('light');
-      
-      // Optimistic UI updates
-      setInvitations(prev => prev.map(i => i.id === inv.id ? { ...i, status: 'declined' } : i));
-
-      await db
-        .from('invitations')
-        .update({ status: 'declined', updated_at: new Date().toISOString() })
-        .eq('id', inv.id);
-
-      // If room was filling, update room back to open if no guest remains
-      const room = rooms.find(r => r.id === inv.room_id);
-      if (room && room.status === 'filling') {
-        const remainingGuests = invitations.filter(i => i.room_id === room.id && i.status === 'accepted' && i.id !== inv.id).length;
-        if (remainingGuests === 0) {
-          setRooms(prev => prev.map(r => r.id === room.id ? { ...r, status: 'open' } : r));
-          await db
-            .from('rooms')
-            .update({ status: 'open', updated_at: new Date().toISOString() })
-            .eq('id', room.id);
-        }
-      }
-
-      await loadData(true); // Silent background refresh!
-    } catch (e) {
-      dialog.error('Lỗi từ chối', e.message);
-      loadData(); // Fallback to full reload if failed
-    }
-  };
-
-  const handleLeaveRoom = async (room) => {
-    try {
-      bridge.haptic('medium');
-      const ok = await dialog.confirm(
-        'Rút lui khỏi phòng hẹn?',
-        `Bạn có chắc chắn muốn rút lui khỏi phòng hẹn "${getTagName(room.child_code)} tại ${room.location}" không?`,
-        { danger: true, confirmLabel: 'Rút lui', cancelLabel: 'Quay lại' }
-      );
-      if (!ok) return;
-
-      // 1. Optimistic UI updates
-      setInvitations(prev => prev.map(i => (i.room_id === room.id && i.receiver_id === ctx.userId && i.status === 'accepted') ? { ...i, status: 'declined', updated_at: new Date().toISOString() } : i));
-
-      const remainingGuests = invitations.filter(i => i.room_id === room.id && i.status === 'accepted' && i.receiver_id !== ctx.userId).length;
-      const nextRoomStatus = remainingGuests === 0 ? 'open' : 'filling';
-      setRooms(prev => prev.map(r => r.id === room.id ? { ...r, status: nextRoomStatus } : r));
-
-      // 2. DB Sync
-      await db
-        .from('invitations')
-        .update({ status: 'declined', updated_at: new Date().toISOString() })
-        .eq('room_id', room.id)
-        .eq('receiver_id', ctx.userId)
-        .eq('status', 'accepted');
-
-      await db
-        .from('rooms')
-        .update({ status: nextRoomStatus, updated_at: new Date().toISOString() })
-        .eq('id', room.id);
-
-      if (nextRoomStatus === 'filling') {
-        await createRoomNativeChat(room.id, room.location);
-      }
-
-      bridge.haptic('success');
-      await loadData(true); // Silent background refresh!
-    } catch (e) {
-      dialog.error('Lỗi rút lui', e.message);
-      loadData();
-    }
-  };
-
-
-
-  const handleInviteAdditionalGuest = async (roomId, guestId) => {
-    try {
-      bridge.haptic('light');
-      const activeWs = scope.workspaceId;
-      const room = rooms.find(r => r.id === roomId);
-      if (!room) return;
-
-      // Rate Limit quota check
-      const currentPending = getPendingInvitationsCount(roomId);
-      const allowedLimit = getOutboundLimit(room);
-
-      if (currentPending >= allowedLimit) {
-        return dialog.error(
-          'Chặn hạn ngạch!',
-          `Không thể mời thêm. Số lời mời pending tối đa của phòng này tại thời điểm này là: ${allowedLimit} lời mời. Vui lòng bấm nút [Thu hồi] các lời mời cũ để nhường chỗ.`
-        );
-      }
-
-      await db.from('invitations').insert({
-        workspace_id: activeWs,
-        room_id: roomId,
-        receiver_id: guestId,
-        status: 'pending'
-      });
-
-      await loadData(true); // Silent background refresh!
-    } catch (e) {
-      dialog.error('Lỗi mời thêm', e.message);
-    }
-  };
-
-  const handleInviteMatchingGuests = async (roomId) => {
-    try {
-      bridge.haptic('light');
-      const activeWs = scope.workspaceId;
-      const room = rooms.find(r => r.id === roomId);
-      if (!room) return;
-
-      const currentPending = getPendingInvitationsCount(roomId);
-      const allowedLimit = getOutboundLimit(room);
-      const roomInvs = invitations.filter(i => i.room_id === roomId);
-
-      // Find all members who have matching tags
-      const matchingMembers = members.filter(m => {
-        // Not invited yet
-        if (roomInvs.some(i => i.receiver_id === m.user_id)) return false;
-        // Has matching tag
-        const tags = allUserTags[m.user_id] || [];
-        return tags.includes(room.child_code);
-      });
-
-      if (matchingMembers.length === 0) {
-        return dialog.info('Không tìm thấy', 'Không có thành viên nào khác trong workspace có chung tag này chưa được mời.');
-      }
-
-      const remainingQuota = allowedLimit - currentPending;
-      if (remainingQuota <= 0) {
-        return dialog.error(
-          'Chặn hạn ngạch!',
-          `Không thể mời thêm. Đã đạt giới hạn pending (${currentPending}/${allowedLimit}). Vui lòng bấm nút [Thu hồi] các lời mời cũ để nhường chỗ.`
-        );
-      }
-
-      const toInvite = matchingMembers.slice(0, remainingQuota);
-      const omittedCount = matchingMembers.length - toInvite.length;
-
-      const invitationsPayload = toInvite.map(m => ({
-        workspace_id: activeWs,
-        room_id: roomId,
-        receiver_id: m.user_id,
-        status: 'pending'
-      }));
-
-      const { error: err } = await db.from('invitations').insert(invitationsPayload);
-      if (err) throw err;
-
-      loadData();
-
-      if (omittedCount > 0) {
-        dialog.info(
-          'Đã gửi lời mời',
-          `Đã gửi lời mời đến ${toInvite.length} người có chung sở thích. ${omittedCount} người còn lại không thể mời do chạm hạn ngạch pending tối đa (${allowedLimit}).`
-        );
-      } else {
-        dialog.success('Thành công', `Đã gửi lời mời đến ${toInvite.length} người có chung sở thích!`);
-      }
-    } catch (e) {
-      dialog.error('Lỗi mời hàng loạt', e.message);
-    }
-  };
-
-  const handleInviteRandomActiveGuests = async (roomId, type, count) => {
-    try {
-      bridge.haptic('light');
-      const activeWs = scope.workspaceId;
-      const room = rooms.find(r => r.id === roomId);
-      if (!room) return;
-
-      const currentPending = getPendingInvitationsCount(roomId);
-      const allowedLimit = getOutboundLimit(room);
-      const roomInvs = invitations.filter(i => i.room_id === roomId);
-
-      // 1. Initial pool of uninvited members
-      let pool = members.filter(m => !roomInvs.some(i => i.receiver_id === m.user_id));
-
-      // 2. Tag filter
-      if (type === 'same_tag') {
-        pool = pool.filter(m => {
-          const tags = allUserTags[m.user_id] || [];
-          return tags.includes(room.child_code);
-        });
-      }
-
-      // 3. Social circle mix filter
-      pool = pool.filter(m => {
-        const hasInteracted = interactionHistory.some(h => 
-          (h.user_id_1 === ctx.userId && h.user_id_2 === m.user_id) ||
-          (h.user_id_1 === m.user_id && h.user_id_2 === ctx.userId)
-        );
-
-        if (randomMode === 'acquaintances') return hasInteracted;
-        if (randomMode === 'strangers') return !hasInteracted;
-        return true;
-      });
-
-      if (pool.length === 0) {
-        let modeName = randomMode === 'acquaintances' ? 'người quen' : 'người lạ';
-        if (randomMode === 'mix') modeName = 'thành viên';
-        return dialog.info('Không tìm thấy', `Không có ${modeName} nào phù hợp chưa được mời.`);
-      }
-
-      const remainingQuota = allowedLimit - currentPending;
-      if (remainingQuota <= 0) {
-        return dialog.error(
-          'Chặn hạn ngạch!',
-          `Không thể mời thêm. Đã đạt giới hạn pending (${currentPending}/${allowedLimit}). Vui lòng thu hồi bớt các lời mời cũ để nhường chỗ.`
-        );
-      }
-
-      // 4. Shuffle and take limit
-      const shuffled = [...pool].sort(() => 0.5 - Math.random());
-      const toInvite = shuffled.slice(0, Math.min(shuffled.length, count, remainingQuota));
-      const omittedCount = shuffled.length - toInvite.length;
-
-      const invitationsPayload = toInvite.map(m => ({
-        workspace_id: activeWs,
-        room_id: roomId,
-        receiver_id: m.user_id,
-        status: 'pending'
-      }));
-
-      const { error: err } = await db.from('invitations').insert(invitationsPayload);
-      if (err) throw err;
-
-      loadData();
-
-      const labelMode = randomMode === 'mix' ? 'lạ/quen mix' : randomMode === 'strangers' ? 'chỉ người lạ' : 'chỉ người quen';
-      if (omittedCount > 0) {
-        dialog.info(
-          'Đã gửi lời mời',
-          `Đã mời ngẫu nhiên ${toInvite.length} đồng nghiệp (${labelMode}). ${omittedCount} người còn lại không thể mời do chạm hạn ngạch pending tối đa (${allowedLimit}).`
-        );
-      } else {
-        dialog.success('Thành công', `Đã mời ngẫu nhiên ${toInvite.length} đồng nghiệp (${labelMode})!`);
-      }
-    } catch (e) {
-      dialog.error('Lỗi mời ngẫu nhiên', e.message);
-    }
-  };
-
-  const handleRevokeInvitation = async (invId) => {
-    try {
-      bridge.haptic('light');
-      // Optimistic update
-      setInvitations(prev => prev.filter(i => i.id !== invId));
-
-      await db.from('invitations').delete().eq('id', invId);
-      await loadData(true); // Silent background refresh!
-    } catch (e) {
-      dialog.error('Lỗi thu hồi', e.message);
-      loadData(); // Fallback on failure
-    }
-  };
-
-  const handleDeleteInvitation = async (invId) => {
-    try {
-      bridge.haptic('medium');
-      const container = document.getElementById(`swipe-container-${invId}`);
-      if (container) {
-        // 1. Instantly lock height to avoid layout jumps, then animate collapse
-        const height = container.offsetHeight;
-        container.style.height = `${height}px`;
-        container.style.transition = 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)';
-        
-        // Force browser reflow to apply locked height before animating to 0
-        container.offsetHeight;
-        
-        // 2. Smoothly shrink height, margin, and opacity to 0
-        container.style.opacity = '0';
-        container.style.height = '0px';
-        container.style.marginBottom = '0px';
-        container.style.paddingTop = '0px';
-        container.style.paddingBottom = '0px';
-      }
-
-      // 3. Once collapse animation completes, optimistically remove from state and sync silently in DB
-      setTimeout(async () => {
-        // Optimistically filter invitation list so the node disappears instantly from the DOM tree
-        setInvitations(prev => prev.filter(i => i.id !== invId));
-
-        try {
-          // Silent DB deletion in the background (no screen skeleton loaders or blinks!)
-          await db.from('invitations').delete().eq('id', invId);
-          // Silent background sync
-          await loadInvitationsData();
-        } catch (dbErr) {
-          console.error('Lỗi khi xóa trong DB:', dbErr);
-        }
-      }, 300);
-
-    } catch (e) {
-      console.error('Lỗi khi thực hiện xóa lời mời:', e);
-    }
-  };
-
-  const handleLoadMockInvitations = async () => {
-    try {
-      bridge.haptic('medium');
-      const activeWs = scope.workspaceId;
-      if (!activeWs) return;
-
-      // 1. Create a mock room first to ensure we have a valid room_id
-      const mockRooms = [
-        {
-          workspace_id: activeWs,
-          host_id: members[0]?.user_id || 'mock-host-1',
-          child_code: 'badminton',
-          location: 'Sân Cầu Lông Bộ Công An',
-          scheduled_at: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
-          max_participants: 4,
-          status: 'open',
-          version: 1
-        },
-        {
-          workspace_id: activeWs,
-          host_id: members[1]?.user_id || 'mock-host-2',
-          child_code: 'coffee',
-          location: 'Cà phê Cộng - Triệu Việt Vương',
-          scheduled_at: new Date(Date.now() + 48 * 3600 * 1000).toISOString(),
-          max_participants: 2,
-          status: 'filling',
-          version: 1
-        },
-        {
-          workspace_id: activeWs,
-          host_id: members[2]?.user_id || 'mock-host-3',
-          child_code: 'football',
-          location: 'Sân bóng đá Đại Học Y',
-          scheduled_at: new Date(Date.now() - 2 * 3600 * 1000).toISOString(), // expired (2 hours ago)
-          max_participants: 10,
-          status: 'expired',
-          version: 1
-        }
-      ];
-
-      // Insert mock rooms
-      const { data: dbRooms, error: roomErr } = await db
-        .from('rooms')
-        .insert(mockRooms.slice(0, Math.min(mockRooms.length, members.length || 3)))
-        .select();
-
-      if (roomErr || !dbRooms) throw roomErr || new Error('Không thể tạo phòng mock.');
-
-      // 2. Create mock invitations pointing to these rooms
-      const mockInvs = dbRooms.map((room, idx) => ({
-        workspace_id: activeWs,
-        room_id: room.id,
-        receiver_id: ctx.userId,
-        status: 'pending',
-        created_at: new Date(Date.now() - idx * 3600 * 1000).toISOString() // staggered times
-      }));
-
-      const { error: invErr } = await db.from('invitations').insert(mockInvs);
-      if (invErr) throw invErr;
-
-      await loadData();
-      dialog.success('Đã tải Mock Data!', `Đã tạo ${dbRooms.length} lời mời Connect mẫu từ đồng nghiệp để bạn trải nghiệm tính năng vuốt xóa.`);
-    } catch (e) {
-      console.error(e);
-      dialog.error('Lỗi nạp Mock Data', e.message);
-    }
-  };
-
-  // Touch handlers completely removed in favor of direct 1-Tap Glassmorphic delete button 🗑️
 
   // --- Sharing Modal Handlers ---
   const handleOpenSharing = async () => {
@@ -2695,9 +1338,7 @@ export default function App() {
 
   // Time Formatter
   const formatTime = (isoString) => {
-    if (!isoString) return 'Hoạt động lâu dài';
     const date = new Date(isoString);
-    if (isNaN(date.getTime())) return 'Hoạt động lâu dài';
     return `${date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} ngày ${date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}`;
   };
 
@@ -2857,722 +1498,89 @@ export default function App() {
     );
   }
 
-  const handleJoinClub = async (club) => {
-    try {
-      bridge.haptic('medium');
-      const activeWs = scope.workspaceId;
-      
-      const { error: invErr } = await db.from('invitations').insert({
-        workspace_id: activeWs,
-        room_id: club.id,
-        receiver_id: ctx.userId,
-        status: 'accepted'
-      });
-
-      if (invErr) throw invErr;
-
-      // Update room to filling/matched to trigger chat creation
-      await db
-        .from('rooms')
-        .update({ status: 'filling', updated_at: new Date().toISOString() })
-        .eq('id', club.id);
-
-      await createRoomNativeChat(club.id, club.location);
-
-      dialog.success('Gia nhập CLB thành công!', `Chào mừng bạn đến với CLB "${club.club_name}".`);
-      loadData(true);
-    } catch (e) {
-      console.error(e);
-      dialog.error('Lỗi khi gia nhập CLB', e.message);
-    }
-  };
-
-  const handleLeaveClub = async (club) => {
-    try {
-      const ok = await dialog.confirm(
-        'Rời Câu lạc bộ?',
-        `Bạn có chắc chắn muốn rời khỏi CLB "${club.club_name}" không? Bạn sẽ không còn quyền truy cập chat group của CLB này nữa.`,
-        { danger: true, confirmLabel: 'Rời CLB', cancelLabel: 'Hủy' }
-      );
-      if (!ok) return;
-
-      bridge.haptic('medium');
-
-      // Delete the invitation
-      await db
-        .from('invitations')
-        .delete()
-        .eq('room_id', club.id)
-        .eq('receiver_id', ctx.userId);
-
-      // Re-sync chat group participants in the background
-      await createRoomNativeChat(club.id, club.location);
-
-      dialog.success('Rời CLB thành công!', `Bạn đã rời khỏi CLB "${club.club_name}".`);
-      loadData(true);
-    } catch (e) {
-      console.error(e);
-      dialog.error('Lỗi khi rời CLB', e.message);
-    }
-  };
-
-  const handleJoinRoomDirectly = async (room) => {
-    try {
-      bridge.haptic('medium');
-      const activeWs = scope.workspaceId;
-      const nowStr = new Date().toISOString();
-
-      // Check if room is full
-      const roomInvs = invitations.filter(i => i.room_id === room.id && i.status === 'accepted');
-      const totalParticipants = roomInvs.length + 2; // accepted guests + Host + Current joining user (1)
-      
-      if (totalParticipants > room.max_participants) {
-        return dialog.error('Phòng đầy', 'Phòng hẹn đã đủ số lượng thành viên tối đa.');
-      }
-
-      // Add user to the room by creating an accepted invitation
-      const { error: invErr } = await db.from('invitations').insert({
-        workspace_id: activeWs,
-        room_id: room.id,
-        receiver_id: ctx.userId,
-        status: 'accepted'
-      });
-
-      if (invErr) throw invErr;
-
-      // Update room state if it is now full
-      if (totalParticipants >= room.max_participants) {
-        await db
-          .from('rooms')
-          .update({ status: 'matched', updated_at: nowStr })
-          .eq('id', room.id);
-
-        await db
-          .from('invitations')
-          .update({ status: 'expired', updated_at: nowStr })
-          .eq('room_id', room.id)
-          .eq('status', 'pending');
-
-        await recordInteractionHistory(room.id, room.host_id);
-        await createRoomNativeChat(room.id, room.location);
-      } else {
-        await db
-          .from('rooms')
-          .update({ status: 'filling', updated_at: nowStr })
-          .eq('id', room.id);
-          
-        await createRoomNativeChat(room.id, room.location);
-      }
-
-      dialog.success('Tham gia thành công!', 'Bạn đã tham gia vào phòng hẹn. Nhóm chat đã được kết nối.');
-      loadData(true);
-    } catch (e) {
-      console.error(e);
-      dialog.error('Lỗi khi tham gia', e.message);
-    }
-  };
-
-  const renderClubCard = (club, isJoined) => {
-    const isHost = club.host_id === ctx.userId;
-    const clubInvs = invitations.filter(i => i.room_id === club.id && i.status === 'accepted');
-    const totalMembers = clubInvs.length + 1; // Host + members
-
-    const hostName = members.find(m => m.user_id === club.host_id)?.full_name || (isHost ? 'Bạn' : 'Đồng nghiệp');
-
+  if (!consentGranted) {
     return (
-      <div 
-        key={club.id} 
-        id={`room-card-${club.id}`}
-        className="mushy-card club-card"
-        style={{
-          marginBottom: 12,
-          padding: 14,
-          background: 'var(--surface)',
-          border: '1px solid var(--border)',
-          borderRadius: 16,
-          transition: 'all 0.3s ease',
-          ...(highlightedRoomId === club.id ? {
-            borderColor: 'var(--brand)',
-            boxShadow: '0 0 0 2.5px var(--brand), 0 4px 16px rgba(230, 57, 70, 0.15)',
-            transform: 'scale(1.01)'
-          } : {})
-        }}
-      >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-          <div>
-            <span style={{ fontSize: 10, background: 'rgba(230, 57, 70, 0.08)', color: 'var(--brand)', padding: '2px 6px', borderRadius: 999, fontWeight: 700, marginRight: 6 }}>
-              {getTagName(club.child_code)}
+      <div className="consent-screen animated-fade-in" style={{
+        minHeight: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'linear-gradient(135deg, #FFF0F2 0%, #FFE5E9 100%)',
+        fontFamily: 'Inter, system-ui, sans-serif',
+        padding: '20px',
+        boxSizing: 'border-box'
+      }}>
+        <div style={{
+          background: 'rgba(255, 255, 255, 0.85)',
+          backdropFilter: 'blur(16px)',
+          border: '1.5px solid rgba(255, 77, 109, 0.15)',
+          borderRadius: '24px',
+          padding: '32px 24px',
+          maxWidth: '400px',
+          boxShadow: '0 15px 35px rgba(255, 77, 109, 0.08)',
+          textAlign: 'center',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center'
+        }}>
+          <span style={{ fontSize: '48px', marginBottom: '16px' }}>🤝🍄</span>
+          <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#1E293B', margin: '0 0 12px' }}>
+            Chào mừng bạn đến với Connect!
+          </h2>
+          <p style={{ fontSize: '12.5px', color: '#64748B', lineHeight: '1.6', margin: '0 0 20px', textAlign: 'left' }}>
+            Để hỗ trợ bạn kết nối với đúng các đồng nghiệp có cùng sở thích, cùng cơ sở và phòng ban, hệ thống cần xử lý thông tin hồ sơ của bạn.
+          </p>
+          <div style={{
+            background: 'rgba(15, 15, 18, 0.02)',
+            border: '1px solid var(--border)',
+            borderRadius: '16px',
+            padding: '14px',
+            fontSize: '12px',
+            textAlign: 'left',
+            color: 'var(--ink)',
+            marginBottom: '20px',
+            width: '100%',
+            boxSizing: 'border-box'
+          }}>
+            <h4 style={{ margin: '0 0 6px', fontWeight: 700 }}>Thông tin sẽ được thu thập:</h4>
+            <ul style={{ margin: 0, paddingLeft: '20px', lineHeight: 1.5 }}>
+              <li>Thông tin phòng ban & cơ sở làm việc</li>
+              <li>Sở thích cá nhân & kỹ năng chia sẻ/học hỏi</li>
+              <li>Lịch sử tương tác và gặp mặt nội bộ</li>
+            </ul>
+          </div>
+          <label style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '10px',
+            cursor: 'pointer',
+            textAlign: 'left',
+            marginBottom: '24px',
+            userSelect: 'none'
+          }}>
+            <input
+              type="checkbox"
+              style={{ marginTop: '3px', accentColor: 'var(--brand)' }}
+              checked={consentCheckbox}
+              onChange={(e) => setConsentCheckbox(e.target.checked)}
+            />
+            <span style={{ fontSize: '12px', color: 'var(--ink)', lineHeight: '1.4' }}>
+              Tôi đồng ý cung cấp thông tin profile và cho phép hệ thống gợi ý buddy phù hợp, nhận lời mời kết nối nội bộ.
             </span>
-            {isHost && (
-              <span style={{ fontSize: 10, background: 'rgba(6, 182, 212, 0.08)', color: '#06B6D4', padding: '2px 6px', borderRadius: 999, fontWeight: 700 }}>
-                👑 Chủ nhiệm
-              </span>
-            )}
-          </div>
-          <span style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>
-            👥 {totalMembers} thành viên
-          </span>
-        </div>
-
-        <h4 style={{ margin: '4px 0 6px', fontSize: 14.5, fontWeight: 800 }}>
-          {club.club_name}
-        </h4>
-        <p style={{ margin: '0 0 10px', fontSize: 12, color: 'var(--muted)', lineHeight: 1.4 }}>
-          {club.club_description}
-        </p>
-
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, color: 'var(--muted)', borderTop: '1px solid var(--hairline)', paddingTop: 10, marginTop: 4 }}>
-          <div>
-            📍 {club.location} <br />
-            👤 Sáng lập: <strong>{hostName}</strong>
-          </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            {isJoined ? (
-              <>
-                <button
-                  type="button"
-                  className="mushy-btn mushy-btn--ghost"
-                  style={{ padding: '6px 12px', minHeight: 30, fontSize: 11.5, borderRadius: 10 }}
-                  onClick={() => {
-                    bridge.haptic('light');
-                    setActiveChatRoom(club);
-                  }}
-                >
-                  💬 Chat CLB
-                </button>
-                {!isHost && (
-                  <button
-                    type="button"
-                    className="mushy-btn mushy-btn--danger"
-                    style={{ padding: '6px 12px', minHeight: 30, fontSize: 11.5, borderRadius: 10, background: 'transparent', borderColor: 'var(--danger)', color: 'var(--danger)', margin: 0 }}
-                    onClick={() => handleLeaveClub(club)}
-                  >
-                    Rời CLB
-                  </button>
-                )}
-              </>
-            ) : (
-              <button
-                type="button"
-                className="mushy-btn mushy-btn--primary"
-                style={{ padding: '6px 12px', minHeight: 30, fontSize: 11.5, borderRadius: 10, background: 'linear-gradient(135deg, var(--brand) 0%, var(--pink) 100%)', border: 'none', color: '#fff', margin: 0 }}
-                onClick={() => handleJoinClub(club)}
-              >
-                Gia nhập
-              </button>
-            )}
-          </div>
+          </label>
+          <button
+            className="mushy-btn mushy-btn--primary mushy-btn--block"
+            style={{ minHeight: '44px', fontWeight: 700 }}
+            disabled={!consentCheckbox}
+            onClick={handleGrantConsent}
+          >
+            Đồng ý và tiếp tục 🚀
+          </button>
         </div>
       </div>
     );
-  };
-
-  const renderRoomCardExtended = (room, isJoined) => {
-    const isHost = room.host_id === ctx.userId;
-    const roomInvs = invitations.filter(i => i.room_id === room.id);
-    const acceptedCount = roomInvs.filter(i => i.status === 'accepted').length;
-    const totalJoined = acceptedCount + 1; // including Host
-    const isFull = totalJoined >= room.max_participants;
-    
-    const hostMemberObj = members.find(m => m.user_id === room.host_id) || (isHost ? { full_name: 'Bạn' } : { full_name: 'Đồng nghiệp' });
-
-    // 6.2 Rate limit parameters
-    const pendingCount = roomInvs.filter(i => i.status === 'pending').length;
-    const currentLimit = getOutboundLimit(room);
-    const isQuotaExceeded = pendingCount >= currentLimit;
-    const hasJoined = invitations.some(i => i.room_id === room.id && i.receiver_id === ctx.userId && i.status === 'accepted');
-
-    return (
-      <div 
-        key={room.id} 
-        id={`room-card-${room.id}`}
-        className={`mushy-card activity-card ${highlightedRoomId === room.id ? 'room-card--highlighted' : ''}`} 
-        style={{ 
-          marginBottom: 14,
-          transition: 'all 0.6s cubic-bezier(0.16, 1, 0.3, 1)',
-          ...(highlightedRoomId === room.id ? {
-            borderColor: 'var(--brand)',
-            boxShadow: '0 0 0 2.5px var(--brand), 0 10px 32px rgba(230, 57, 70, 0.22)',
-            transform: 'scale(1.03) translate3d(0,0,0)',
-            background: 'rgba(230, 57, 70, 0.02)'
-          } : {})
-        }}
-      >
-        <div className="activity-type-banner act-badge-sports">
-          {FLAT_TAGS.find(t => t.code === room.child_code)?.name?.charAt(0) || '🏸'}
-        </div>
-        <h4 className="activity-title" style={{ fontSize: 16 }}>
-          {getTagName(room.child_code)} · {room.location}
-        </h4>
-        <p className="activity-desc" style={{ fontSize: 12, margin: '4px 0 8px' }}>
-          Host bởi: <strong>{hostMemberObj.full_name}</strong>
-        </p>
-
-        <div className="activity-meta-row">
-          <div className="activity-meta-item">
-            <span>⏰ Hẹn vào:</span> <strong>{formatTime(room.scheduled_at)}</strong>
-          </div>
-        </div>
-
-        {/* Display Room state (PRD Section 6.1) */}
-        <div style={{ marginTop: 6, display: 'flex', gap: 6, alignItems: 'center' }}>
-          {room.status === 'open' && <span className="mushy-status --warn" style={{ fontSize: 11, padding: '2px 8px' }}><span className="mushy-status-dot" />Mới lập (open)</span>}
-          {room.status === 'filling' && <span className="mushy-status --warn" style={{ fontSize: 11, padding: '2px 8px', background: 'rgba(6,182,212,0.1)', color: '#06B6D4' }}><span className="mushy-status-dot" style={{ background: '#06B6D4' }} />Đang gom slot ({totalJoined}/{room.max_participants})</span>}
-          {room.status === 'matched' && <span className="mushy-status --ok" style={{ fontSize: 11, padding: '2px 8px' }}><span className="mushy-status-dot" />Đã ghép đủ (matched)</span>}
-          {room.status === 'cancelled' && <span className="mushy-status --err" style={{ fontSize: 11, padding: '2px 8px' }}><span className="mushy-status-dot" />Đã hủy</span>}
-          {room.status === 'expired' && <span className="mushy-status --err" style={{ fontSize: 11, padding: '2px 8px', background: '#E5E7EB', color: '#9CA3AF' }}><span className="mushy-status-dot" style={{ background: '#9CA3AF' }} />Hết hạn</span>}
-        </div>
-
-        {room.status === 'cancelled' && room.cancel_reason && (
-          <div style={{ marginTop: 8, fontSize: 12, color: 'var(--danger)', fontStyle: 'italic' }}>
-            Lý do hủy: "{room.cancel_reason}"
-          </div>
-        )}
-
-        {/* Members Avatars Joined */}
-        <div className="participants-container">
-          <div className="participants-avatars">
-            <div className="participant-avatar-icon" title="Host">
-              <span>👑</span>
-            </div>
-            {roomInvs.filter(i => i.status === 'accepted').map(inv => {
-              const guest = members.find(m => m.user_id === inv.receiver_id) || (inv.receiver_id === ctx.userId ? { full_name: 'Bạn' } : { full_name: 'Đồng nghiệp' });
-              return (
-                <div key={inv.id} className="participant-avatar-icon" title={guest.full_name}>
-                  <span>{guest.full_name?.charAt(0)}</span>
-                </div>
-              );
-            })}
-          </div>
-          <span className="participants-status-text">
-            Sĩ số: {totalJoined} / {room.max_participants}
-          </span>
-        </div>
-
-        {/* Check-in and Roll Call Section */}
-        {(isHost || hasJoined) && room.status === 'matched' && (
-          <div style={{ marginTop: 12, background: 'rgba(79, 70, 229, 0.06)', border: '1px solid rgba(79, 70, 229, 0.15)', borderRadius: 10, padding: '10px 12px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
-              <span style={{ fontSize: 12, color: 'var(--brand)', fontWeight: 600 }}>🛡️ Điểm Uy Tín:</span>
-              {isHost ? (
-                room.roll_call_done ? (
-                  <span style={{ fontSize: 12, color: '#10B981', fontWeight: 700 }}>✓ Đã hoàn thành điểm danh</span>
-                ) : (
-                  <button
-                    type="button"
-                    className="mushy-btn"
-                    style={{ minHeight: 30, fontSize: 11, padding: '4px 10px', background: 'linear-gradient(135deg, var(--brand) 0%, var(--pink) 100%)', color: '#fff', border: 'none', margin: 0 }}
-                    onClick={() => {
-                      bridge.haptic('light');
-                      setShowRollCallModal(room);
-                      setRollCallAttended([room.host_id, ...(roomInvs.filter(i => i.status === 'accepted' && (room.checked_in_users || []).includes(i.receiver_id)).map(i => i.receiver_id))]);
-                      setRollCallNoShow([]);
-                    }}
-                  >
-                    📋 Điểm danh thành viên
-                  </button>
-                )
-              ) : (
-                (() => {
-                  const hasCheckedIn = (room.checked_in_users || []).includes(ctx.userId);
-                  const isNoShow = (room.no_shows || []).includes(ctx.userId);
-                  if (hasCheckedIn) {
-                    return <span style={{ fontSize: 12, color: '#10B981', fontWeight: 700 }}>✓ Bạn đã điểm danh thành công</span>;
-                  }
-                  if (isNoShow) {
-                    return <span style={{ fontSize: 12, color: 'var(--danger)', fontWeight: 700 }}>🚨 Bạn bị báo cáo bùng kèo (-15đ)</span>;
-                  }
-                  
-                  const now = new Date();
-                  const sched = new Date(room.scheduled_at);
-                  const windowStart = new Date(sched.getTime() - 30 * 60 * 1000); // 30 mins before
-                  const windowEnd = new Date(sched.getTime() + 2 * 60 * 60 * 1000); // 2 hours after
-                  
-                  const canCheckIn = now >= windowStart && now <= windowEnd;
-                  
-                  if (canCheckIn) {
-                    return (
-                      <button
-                        type="button"
-                        className="mushy-btn"
-                        style={{ minHeight: 30, fontSize: 11, padding: '4px 10px', background: '#4F46E5', color: '#fff', border: 'none', margin: 0 }}
-                        onClick={() => handleSelfCheckIn(room)}
-                      >
-                        📍 Tự check-in (+5đ)
-                      </button>
-                    );
-                  } else if (now < windowStart) {
-                    return <span style={{ fontSize: 11, color: 'var(--muted)' }}>Check-in mở trước giờ hẹn 30 phút</span>;
-                  } else {
-                    return <span style={{ fontSize: 11, color: 'var(--danger)' }}>Đã hết hạn tự check-in</span>;
-                  }
-                })()
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* 7.1 Distributed Fault-Tolerance Group Chat Status */}
-        {((isHost || hasJoined) && (room.status === 'matched' || room.status === 'filling' || isFull || totalJoined > 1) && 
-          room.status !== 'cancelled' && room.status !== 'expired') && (
-          <div style={{ marginTop: 12, background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.15)', borderRadius: 10, padding: '8px 12px' }}>
-            {room.chat_group_id ? (
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: 12, color: '#10B981', fontWeight: 600 }}>💬 Nhóm chat Super App đã sẵn sàng!</span>
-                <div style={{ position: 'relative', display: 'inline-block' }}>
-                  <button
-                    className="mushy-btn"
-                    style={{ minHeight: 30, fontSize: 11, padding: '4px 10px', background: '#10B981', color: '#fff' }}
-                    onClick={() => {
-                      bridge.haptic('light');
-                      setActiveChatRoom(room);
-                      if (isInShell()) {
-                        callNative('OPEN_CHAT_GROUP', { chatGroupId: room.chat_group_id });
-                      }
-                    }}
-                  >
-                    Vào Chat
-                  </button>
-                  {hasUnreadMessages(room) && (
-                    <span className="notification-dot" style={{
-                      position: 'absolute',
-                      top: -4,
-                      right: -4,
-                      width: 8,
-                      height: 8,
-                      borderRadius: '50%',
-                      background: 'var(--brand)',
-                      border: '1.5px solid #fff',
-                      boxShadow: '0 1px 3px rgba(230, 57, 70, 0.4)'
-                    }} />
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: 12, color: '#D97706', fontWeight: 600 }}>
-                  {reconnectingRoomId === room.id ? '⏳ Đang thiết lập kết nối lại...' : '⏳ Đang khởi tạo nhóm kết nối...'}
-                </span>
-                <button
-                  className="mushy-btn mushy-btn--ghost"
-                  style={{ minHeight: 30, fontSize: 11, padding: '4px 10px', color: '#D97706', borderColor: '#F59E0B', opacity: reconnectingRoomId === room.id ? 0.6 : 1 }}
-                  disabled={reconnectingRoomId === room.id}
-                  onClick={() => handleReconnectChat(room)}
-                >
-                  {reconnectingRoomId === room.id ? '⏳ Kết nối lại...' : 'Kết nối lại nhóm chat'}
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Host Actions: Invite more or Cancel room */}
-        {isHost && (room.status === 'open' || room.status === 'filling' || room.status === 'matched') && (
-          <div style={{ marginTop: 14, borderTop: '1px solid var(--hairline)', paddingTop: 12 }}>
-            <h5 style={{ margin: '0 0 6px', fontSize: 13, fontWeight: 700 }}>Bảng điều khiển của Host:</h5>
-
-            {/* Rate limiting indicator */}
-            <div className="quota-indicator">
-              Hạn ngạch lời mời pending: <strong>{pendingCount}/{currentLimit}</strong>
-            </div>
-
-            {/* Invite more candidates drop grid */}
-            {!isFull && room.status !== 'matched' && (() => {
-              const matching = [];
-              const others = [];
-
-              members.filter(m => !roomInvs.some(i => i.receiver_id === m.user_id)).forEach(m => {
-                const tags = allUserTags[m.user_id] || [];
-                if (tags.includes(room.child_code)) {
-                  matching.push({ member: m, isMatch: true });
-                } else {
-                  others.push({ member: m, isMatch: false });
-                }
-              });
-
-              const allCandidates = [...matching, ...others];
-              const q = inviteSearchQuery.trim().toLowerCase();
-              const filteredCandidates = allCandidates.filter(c => {
-                const dept = allProfiles[c.member.user_id]?.department || '';
-                return !q || c.member.full_name.toLowerCase().includes(q) || dept.toLowerCase().includes(q);
-              });
-
-              // Smart limit displayed list to prevent overwhelm
-              const displayedCandidates = [];
-              if (q) {
-                displayedCandidates.push(...filteredCandidates.slice(0, 30));
-              } else {
-                displayedCandidates.push(...matching);
-                displayedCandidates.push(...others.slice(0, 10));
-              }
-
-              return (
-                <div style={{ marginTop: 8 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, flexWrap: 'wrap', gap: 6 }}>
-                    <label style={{ fontSize: 11.5, color: 'var(--muted)', display: 'block', margin: 0, fontWeight: 600 }}>Mời thêm ứng viên mới:</label>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      {matching.length > 0 && (
-                        <button
-                          type="button"
-                          className="mushy-btn btn-glow-brand"
-                          disabled={isQuotaExceeded}
-                          onClick={() => handleInviteMatchingGuests(room.id)}
-                          style={{ minHeight: 26, fontSize: 10, padding: '2px 8px' }}
-                        >
-                          🔥 Mời tất cả trùng tag ({matching.length})
-                        </button>
-                      )}
-                      {allCandidates.length > 0 && (
-                        <button
-                          type="button"
-                          className="mushy-btn"
-                          disabled={isQuotaExceeded}
-                          onClick={() => {
-                            const remainingQuota = currentLimit - pendingCount;
-                            handleInviteRandomActiveGuests(room.id, 'any', Math.min(3, remainingQuota));
-                          }}
-                          style={{
-                            minHeight: 26,
-                            fontSize: 10,
-                            padding: '2px 8px',
-                            background: 'rgba(6, 182, 212, 0.08)',
-                            borderColor: 'rgba(6, 182, 212, 0.3)',
-                            color: '#06B6D4',
-                            fontWeight: 'bold'
-                          }}
-                        >
-                          🎲 Mời ngẫu nhiên ({randomMode === 'mix' ? 'mix' : randomMode === 'strangers' ? 'lạ' : 'quen'})
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Small search input for invitation panel */}
-                  <div style={{ position: 'relative', marginBottom: 8 }}>
-                    <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: 'var(--muted)', pointerEvents: 'none' }}>🔍</span>
-                    <input
-                      type="text"
-                      className="mushy-input"
-                      placeholder="Tìm nhanh tên đồng nghiệp muốn mời..."
-                      value={inviteSearchQuery}
-                      onChange={(e) => setInviteSearchQuery(e.target.value)}
-                      style={{ paddingLeft: 26, height: 28, fontSize: 11.5, borderRadius: 8, margin: 0 }}
-                    />
-                    {inviteSearchQuery && (
-                      <button
-                        type="button"
-                        onClick={() => setInviteSearchQuery('')}
-                        style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: 12, padding: 0 }}
-                      >
-                        ✕
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Scrollable box for invite candidate list (Vertical rows) */}
-                  <div 
-                    className="guest-selector-scroll" 
-                    style={{ 
-                      maxHeight: 220, 
-                      overflowY: 'auto',
-                      display: 'flex', 
-                      flexDirection: 'column',
-                      gap: 6, 
-                      background: 'rgba(15, 15, 18, 0.01)',
-                      padding: '8px',
-                      border: '1px solid var(--hairline)',
-                      borderRadius: '12px'
-                    }}
-                  >
-                    {displayedCandidates.length === 0 ? (
-                      <span style={{ fontSize: 11, fontStyle: 'italic', color: 'var(--muted)', padding: '4px', textAlign: 'center' }}>Không còn thành viên khả dụng hoặc khớp tìm kiếm.</span>
-                    ) : (
-                      <>
-                        {displayedCandidates.map(({ member: m, isMatch }) => {
-                          const profile = allProfiles[m.user_id] || {};
-                          return (
-                            <div
-                              key={m.user_id}
-                              style={{
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center',
-                                padding: '6px 10px',
-                                background: isMatch ? 'rgba(230, 57, 70, 0.04)' : '#fff',
-                                border: isMatch ? '1.5px solid rgba(230, 57, 70, 0.2)' : '1px solid var(--hairline)',
-                                borderRadius: '10px',
-                                transition: 'all 150ms ease'
-                              }}
-                            >
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
-                                {/* Tiny Initials Avatar */}
-                                <div style={{
-                                  width: 28,
-                                  height: 28,
-                                  borderRadius: '50%',
-                                  background: isMatch ? 'linear-gradient(135deg, #FF7E5F 0%, #FEB47B 100%)' : 'linear-gradient(135deg, #F1F5F9 0%, #E2E8F0 100%)',
-                                  color: isMatch ? '#fff' : '#64748B',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  fontSize: 11,
-                                  fontWeight: 'bold',
-                                  flexShrink: 0
-                                }}>
-                                  {m.full_name?.charAt(0)}
-                                </div>
-                                <div style={{ minWidth: 0, flex: 1 }}>
-                                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--foreground)', display: 'flex', alignItems: 'center', gap: 4 }}>
-                                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.full_name}</span>
-                                    {isMatch && (
-                                      <span style={{
-                                        fontSize: 8.5,
-                                        padding: '1px 4px',
-                                        background: 'var(--brand-soft)',
-                                        color: 'var(--brand)',
-                                        borderRadius: 4,
-                                        fontWeight: 'bold',
-                                        flexShrink: 0
-                                      }}>
-                                        🔥 Trùng tag
-                                      </span>
-                                    )}
-                                  </div>
-                                  <div style={{ fontSize: 10, color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                    {profile.department || 'Đồng nghiệp'}
-                                  </div>
-                                </div>
-                              </div>
-                              <button
-                                type="button"
-                                className="mushy-btn"
-                                disabled={isQuotaExceeded}
-                                onClick={() => handleInviteAdditionalGuest(room.id, m.user_id)}
-                                style={{
-                                  minHeight: 26,
-                                  fontSize: 10.5,
-                                  padding: '2px 10px',
-                                  background: isMatch ? 'var(--brand)' : 'transparent',
-                                  borderColor: 'var(--brand)',
-                                  color: isMatch ? '#fff' : 'var(--brand)',
-                                  borderRadius: 6,
-                                  fontWeight: 600,
-                                  flexShrink: 0,
-                                  margin: 0
-                                }}
-                              >
-                                Mời
-                              </button>
-                            </div>
-                          );
-                        })}
-                        
-                        {!q && allCandidates.length > displayedCandidates.length && (
-                          <div style={{ 
-                            fontSize: 10, 
-                            color: 'var(--muted)', 
-                            textAlign: 'center', 
-                            padding: '4px 0', 
-                            borderTop: '1px dashed var(--hairline)',
-                            marginTop: 4
-                          }}>
-                            💡 Gợi ý {displayedCandidates.length}/{allCandidates.length} đồng nghiệp. Nhập ô tìm kiếm để lọc thêm...
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
-
-                  {isQuotaExceeded && (
-                    <p style={{ fontSize: 10, color: 'var(--danger)', margin: '4px 0 0' }}>
-                      ⚠️ Đã đạt giới hạn pending ({pendingCount}). Vui lòng thu hồi bớt các lời mời cũ bên dưới để có thể mời tiếp.
-                    </p>
-                  )}
-                </div>
-              );
-            })()}
-
-            {/* Display pending list with Revoke option */}
-            {roomInvs.filter(i => i.status === 'pending').length > 0 && (
-              <div style={{ marginTop: 10 }}>
-                <span style={{ fontSize: 11, color: 'var(--muted)' }}>Lời mời đang chờ:</span>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
-                  {roomInvs.filter(i => i.status === 'pending').map(inv => {
-                    const invitedGuest = members.find(m => m.user_id === inv.receiver_id) || { full_name: 'Ứng viên' };
-                    return (
-                      <span key={inv.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'rgba(15,15,18,0.03)', padding: '2px 8px', borderRadius: 6, fontSize: 11 }}>
-                        {invitedGuest.full_name}
-                        <button
-                          style={{ border: 'none', background: 'transparent', color: 'var(--danger)', cursor: 'pointer', padding: 0, fontWeight: 'bold' }}
-                          onClick={() => handleRevokeInvitation(inv.id)}
-                        >
-                          [Thu hồi]
-                        </button>
-                      </span>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Withdraw cancellation button */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
-              <button
-                className="mushy-btn mushy-btn--ghost"
-                style={{ color: 'var(--danger)', borderColor: 'var(--danger)', minHeight: 36, fontSize: 12, padding: '4px 12px' }}
-                onClick={() => {
-                  setCancelReason('Bận việc đột xuất');
-                  setShowCancelModal(room);
-                }}
-              >
-                🚨 Hủy phòng hẹn văn minh
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Guest Action: Out kèo / Rút khỏi phòng */}
-        {!isHost && hasJoined && (room.status === 'open' || room.status === 'filling' || room.status === 'matched') && (
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12, borderTop: '1px solid var(--hairline)', paddingTop: 12 }}>
-            <button
-              className="mushy-btn mushy-btn--ghost"
-              style={{ color: 'var(--danger)', borderColor: 'var(--danger)', minHeight: 36, fontSize: 12, padding: '4px 12px' }}
-              onClick={() => handleLeaveRoom(room)}
-            >
-              🚪 Out kèo / Rút khỏi phòng
-            </button>
-          </div>
-        )}
-
-        {/* Xin tham gia button (for explore/public rooms) */}
-        {!isHost && !hasJoined && (room.status === 'open' || room.status === 'filling') && (
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12, borderTop: '1px solid var(--hairline)', paddingTop: 12 }}>
-            <button
-              type="button"
-              className="mushy-btn mushy-btn--primary"
-              style={{ padding: '6px 12px', minHeight: 30, fontSize: 11.5, borderRadius: 10, background: 'linear-gradient(135deg, var(--brand) 0%, var(--pink) 100%)', border: 'none', color: '#fff', margin: 0 }}
-              onClick={() => handleJoinRoomDirectly(room)}
-            >
-              ➕ Xin Tham Gia
-            </button>
-          </div>
-        )}
-
-        {/* Xóa dọn dẹp kèo cũ đã hủy hoặc hết hạn */}
-        {(room.status === 'cancelled' || room.status === 'expired') && (
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12, borderTop: '1px solid var(--hairline)', paddingTop: 12 }}>
-            <button
-              className="mushy-btn mushy-btn--ghost"
-              style={{ color: 'var(--danger)', borderColor: 'var(--danger)', minHeight: 36, fontSize: 12, padding: '4px 12px' }}
-              onClick={() => handleHideOldRoom(room.id)}
-            >
-              🗑️ Xóa khỏi danh sách
-            </button>
-          </div>
-        )}
-      </div>
-    );
-  };
+  }
 
   return (
     <div className="mushy-page">
@@ -3617,13 +1625,8 @@ export default function App() {
                 {avatarTooltip.member.full_name?.charAt(0)}
               </div>
               <div>
-                <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--ink)', lineHeight: 1.3, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
+                <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--ink)', lineHeight: 1.3 }}>
                   {avatarTooltip.member.full_name}
-                  {(avatarTooltip.profile?.reputation_score ?? 100) >= 120 && (
-                    <span className="reputation-badge-radar" style={{ margin: 0 }} title={rooms.filter(r => r.host_id === avatarTooltip.member.user_id && r.status !== 'cancelled').length >= 5 ? 'Host gương mẫu' : 'Đồng đội uy tín'}>
-                      {rooms.filter(r => r.host_id === avatarTooltip.member.user_id && r.status !== 'cancelled').length >= 5 ? '👑 Host gương mẫu' : '🌟 Đồng đội uy tín'}
-                    </span>
-                  )}
                 </div>
                 {avatarTooltip.member.work_phone && (
                   <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
@@ -3650,15 +1653,6 @@ export default function App() {
                   <div>
                     <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Cơ sở</div>
                     <div style={{ fontSize: 13, color: 'var(--ink)', fontWeight: 500, marginTop: 1 }}>{avatarTooltip.profile.facility}</div>
-                  </div>
-                </div>
-              )}
-              {avatarTooltip.profile && (
-                <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                  <span style={{ fontSize: 13, minWidth: 20 }}>🛡️</span>
-                  <div>
-                    <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Điểm Uy Tín</div>
-                    <div style={{ fontSize: 13, color: 'var(--ink)', fontWeight: 700, marginTop: 1 }}>{avatarTooltip.profile.reputation_score ?? 100}</div>
                   </div>
                 </div>
               )}
@@ -3700,153 +1694,24 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => {
-                  const id = avatarTooltip.member.user_id;
-                  if (invitedGuests.includes(id)) {
-                    setInvitedGuests(prev => prev.filter(x => x !== id));
-                  } else {
-                    if (invitedGuests.length >= createRoomAllowedLimit) {
-                      dialog.error('Hạn ngạch đầy!', `Chỉ có thể mời tối đa ${createRoomAllowedLimit} người.`);
-                    } else {
-                      bridge.haptic('light');
-                      setInvitedGuests(prev => [...prev, id]);
-                    }
-                  }
+                  bridge.haptic('light');
+                  setSelectedConnectBuddy(avatarTooltip.member);
+                  setShowConnectSheet(true);
                   setAvatarTooltip(null);
                 }}
                 style={{
                   flex: 2, padding: '10px 0', borderRadius: 12, border: 'none',
-                  background: invitedGuests.includes(avatarTooltip.member.user_id)
-                    ? 'rgba(230, 57, 70, 0.1)' : 'linear-gradient(135deg, var(--brand) 0%, var(--pink) 100%)',
-                  color: invitedGuests.includes(avatarTooltip.member.user_id) ? 'var(--brand)' : '#fff',
+                  background: 'linear-gradient(135deg, var(--brand) 0%, var(--pink) 100%)',
+                  color: '#fff',
                   fontSize: 13, fontWeight: 700, cursor: 'pointer'
                 }}
               >
-                {invitedGuests.includes(avatarTooltip.member.user_id) ? '✕ Bỏ chọn' : '✓ Mời người này'}
+                🤝 Kết nối nhanh
               </button>
             </div>
           </div>
         </div>
       )}
-
-      {/* Host Roll Call Modal */}
-      {showRollCallModal && (() => {
-        const room = showRollCallModal;
-        const roomInvs = invitations.filter(i => i.room_id === room.id && i.status === 'accepted');
-        const hostObj = members.find(m => m.user_id === room.host_id) || (room.host_id === ctx.userId ? { full_name: 'Bạn' } : { full_name: 'Host' });
-        
-        return (
-          <div
-            style={{
-              position: 'fixed', inset: 0, zIndex: 9999,
-              background: 'rgba(15, 15, 18, 0.55)',
-              backdropFilter: 'blur(4px)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              padding: 16
-            }}
-          >
-            <div
-              style={{
-                background: 'var(--surface)',
-                borderRadius: 20,
-                padding: '24px 20px',
-                width: '100%',
-                maxWidth: 420,
-                boxShadow: '0 10px 40px rgba(15,15,18,0.2)',
-                border: '1px solid var(--border)'
-              }}
-            >
-              <h4 style={{ margin: '0 0 6px', fontSize: 16, fontWeight: 800, color: 'var(--ink)' }}>📋 Điểm danh cuộc hẹn</h4>
-              <p style={{ margin: '0 0 16px', fontSize: 12, color: 'var(--muted)', lineHeight: 1.4 }}>
-                Xác nhận sự tham gia của thành viên đi chill tại <strong>{room.location}</strong>
-              </p>
-              
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
-                {/* Host row */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: 'rgba(15,15,18,0.02)', borderRadius: 10, border: '1px solid var(--border)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span>👑</span>
-                    <span style={{ fontSize: 13, fontWeight: 700 }}>{hostObj.full_name} (Host)</span>
-                  </div>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <button
-                      type="button"
-                      className="mushy-btn"
-                      style={{ minHeight: 26, fontSize: 10, padding: '2px 8px', background: rollCallAttended.includes(room.host_id) ? '#10B981' : 'transparent', color: rollCallAttended.includes(room.host_id) ? '#fff' : 'var(--muted)', borderColor: rollCallAttended.includes(room.host_id) ? '#10B981' : 'var(--border)', margin: 0 }}
-                      onClick={() => {
-                        setRollCallAttended(prev => prev.includes(room.host_id) ? prev.filter(id => id !== room.host_id) : [...prev, room.host_id]);
-                        setRollCallNoShow(prev => prev.filter(id => id !== room.host_id));
-                      }}
-                    >
-                      Có mặt
-                    </button>
-                  </div>
-                </div>
-                
-                {/* Guests rows */}
-                {roomInvs.length === 0 ? (
-                  <span style={{ fontSize: 11, fontStyle: 'italic', color: 'var(--muted)', textAlign: 'center', display: 'block', padding: '8px 0' }}>Chưa có thành viên nào tham gia.</span>
-                ) : (
-                  roomInvs.map(inv => {
-                    const guest = members.find(m => m.user_id === inv.receiver_id) || (inv.receiver_id === ctx.userId ? { full_name: 'Bạn' } : { full_name: 'Đồng nghiệp' });
-                    const isAttended = rollCallAttended.includes(inv.receiver_id);
-                    const isNoShow = rollCallNoShow.includes(inv.receiver_id);
-                    
-                    return (
-                      <div key={inv.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: 'rgba(15,15,18,0.02)', borderRadius: 10, border: '1px solid var(--border)' }}>
-                        <span style={{ fontSize: 13, fontWeight: 600 }}>{guest.full_name}</span>
-                        <div style={{ display: 'flex', gap: 6 }}>
-                          <button
-                            type="button"
-                            className="mushy-btn"
-                            style={{ minHeight: 26, fontSize: 10, padding: '2px 8px', background: isAttended ? '#10B981' : 'transparent', color: isAttended ? '#fff' : 'var(--muted)', borderColor: isAttended ? '#10B981' : 'var(--border)', margin: 0 }}
-                            onClick={() => {
-                              setRollCallAttended(prev => prev.includes(inv.receiver_id) ? prev.filter(id => id !== inv.receiver_id) : [...prev, inv.receiver_id]);
-                              setRollCallNoShow(prev => prev.filter(id => id !== inv.receiver_id));
-                            }}
-                          >
-                            Có mặt
-                          </button>
-                          <button
-                            type="button"
-                            className="mushy-btn"
-                            style={{ minHeight: 26, fontSize: 10, padding: '2px 8px', background: isNoShow ? '#EF4444' : 'transparent', color: isNoShow ? '#fff' : 'var(--muted)', borderColor: isNoShow ? '#EF4444' : 'var(--border)', margin: 0 }}
-                            onClick={() => {
-                              setRollCallNoShow(prev => prev.includes(inv.receiver_id) ? prev.filter(id => id !== inv.receiver_id) : [...prev, inv.receiver_id]);
-                              setRollCallAttended(prev => prev.filter(id => id !== inv.receiver_id));
-                            }}
-                          >
-                            Bùng kèo
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-              
-              <div style={{ display: 'flex', gap: 10 }}>
-                <button
-                  type="button"
-                  className="mushy-btn mushy-btn--ghost"
-                  style={{ flex: 1, minHeight: 38 }}
-                  onClick={() => setShowRollCallModal(null)}
-                >
-                  Đóng
-                </button>
-                <button
-                  type="button"
-                  className="mushy-btn mushy-btn--primary"
-                  style={{ flex: 1, minHeight: 38, background: 'linear-gradient(135deg, var(--brand) 0%, var(--pink) 100%)', color: '#fff', border: 'none' }}
-                  onClick={handleRollCallSubmit}
-                  disabled={submittingRollCall}
-                >
-                  {submittingRollCall ? 'Đang gửi...' : 'Gửi điểm danh'}
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
 
       {/* Header section */}
       <header className="app-header">
@@ -3860,7 +1725,7 @@ export default function App() {
       </header>
 
       {/* Tab Navigation */}
-      <nav className="tab-navigation tab-navigation-bottom" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+      <nav className="tab-navigation tab-navigation-bottom" style={{ gridTemplateColumns: '1fr 1fr 1fr 1fr' }}>
         <button
           className={`nav-tab-btn ${activeTab === 'radar' ? 'nav-tab-btn--active' : ''}`}
           onClick={() => setActiveTab('radar')}
@@ -3868,37 +1733,12 @@ export default function App() {
           <span>🛰️</span> Radar
         </button>
         <button
-          className={`nav-tab-btn ${activeTab === 'community' ? 'nav-tab-btn--active' : ''}`}
-          onClick={() => {
-            bridge.haptic('light');
-            setActiveTab('community');
-          }}
-        >
-          <span style={{ position: 'relative', display: 'inline-block' }}>
-            👥
-            {hasAnyRoomUnread && (
-              <span className="notification-dot" style={{
-                position: 'absolute',
-                top: -3,
-                right: -3,
-                width: 7,
-                height: 7,
-                borderRadius: '50%',
-                background: 'var(--brand)',
-                border: '1.5px solid #fff',
-                boxShadow: '0 1px 3px rgba(230, 57, 70, 0.3)'
-              }} />
-            )}
-          </span>
-          Cộng đồng
-        </button>
-        <button
           className={`nav-tab-btn ${activeTab === 'inbox' ? 'nav-tab-btn--active' : ''}`}
           onClick={() => setActiveTab('inbox')}
         >
           <span style={{ position: 'relative', display: 'inline-block' }}>
             📥
-            {invitations.filter(i => i.receiver_id === ctx.userId && i.status === 'pending').length > 0 && (
+            {connectionRequests.filter(r => r.to_user_id === ctx.userId && r.status === 'pending').length > 0 && (
               <span className="notification-dot" style={{
                 position: 'absolute',
                 top: -3,
@@ -3913,6 +1753,31 @@ export default function App() {
             )}
           </span>
           Lời Mời
+        </button>
+        <button
+          className={`nav-tab-btn ${activeTab === 'connections' ? 'nav-tab-btn--active' : ''}`}
+          onClick={() => setActiveTab('connections')}
+        >
+          <span style={{ position: 'relative', display: 'inline-block' }}>
+            🤝
+            {connectionMeetings.filter(m => m.status === 'pending_confirmation' && 
+              ((connectionRequests.find(r => r.id === m.request_id)?.from_user_id === ctx.userId && !m.from_confirmed) || 
+               (connectionRequests.find(r => r.id === m.request_id)?.to_user_id === ctx.userId && !m.to_confirmed))
+            ).length > 0 && (
+              <span className="notification-dot" style={{
+                position: 'absolute',
+                top: -3,
+                right: -3,
+                width: 7,
+                height: 7,
+                borderRadius: '50%',
+                background: 'var(--brand)',
+                border: '1.5px solid #fff',
+                boxShadow: '0 1px 3px rgba(230, 57, 70, 0.3)'
+              }} />
+            )}
+          </span>
+          Kết Nối
         </button>
         <button
           className={`nav-tab-btn ${activeTab === 'profile' ? 'nav-tab-btn--active' : ''}`}
@@ -3999,6 +1864,96 @@ export default function App() {
                     )}
                   </div>
 
+                  {/* Primary Buddy section for Newbies */}
+                  {newbiePrimaryBuddy && (
+                    <section className="mushy-card newbie-buddy-card" style={{
+                      background: 'linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%)',
+                      border: '1.5px solid #FCD34D',
+                      borderRadius: '20px',
+                      padding: '16px 20px',
+                      marginBottom: '16px',
+                      position: 'relative',
+                      overflow: 'hidden',
+                      boxShadow: '0 8px 24px rgba(245, 158, 11, 0.08)'
+                    }}>
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        marginBottom: '10px'
+                      }}>
+                        <span style={{
+                          fontSize: '11px',
+                          fontWeight: '800',
+                          color: '#D97706',
+                          background: '#FEF3C7',
+                          padding: '3px 8px',
+                          borderRadius: '8px',
+                          border: '1px solid #FCD34D',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.05em'
+                        }}>
+                          🌟 Buddy cho tuần đầu
+                        </span>
+                        <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#D97706' }}>
+                          {newbiePrimaryBuddy.matchScore}% Match
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '14px', alignItems: 'center' }}>
+                        <div style={{
+                          width: '48px',
+                          height: '48px',
+                          borderRadius: '50%',
+                          background: getAvatarGradient(newbiePrimaryBuddy.member.full_name?.charAt(0)),
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '18px',
+                          fontWeight: 'bold',
+                          color: '#fff',
+                          boxShadow: '0 4px 10px rgba(217, 119, 6, 0.15)',
+                          flexShrink: 0
+                        }}>
+                          {newbiePrimaryBuddy.member.full_name?.charAt(0)}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <h4 style={{ margin: 0, fontSize: '14.5px', fontWeight: '800', color: '#1F2937' }}>
+                            {newbiePrimaryBuddy.member.full_name}
+                          </h4>
+                          <p style={{ margin: '2px 0 0', fontSize: '11.5px', color: '#4B5563' }}>
+                            🏢 {newbiePrimaryBuddy.profile.department} · 📍 {newbiePrimaryBuddy.profile.facility}
+                          </p>
+                          <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#D97706', fontStyle: 'italic' }}>
+                            💡 Sẵn sàng hướng dẫn bạn làm quen môi trường làm việc mới!
+                          </p>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '10px', marginTop: '14px', borderTop: '1px solid rgba(245, 158, 11, 0.15)', paddingTop: '12px' }}>
+                        <button
+                          className="mushy-btn mushy-btn--primary"
+                          style={{
+                            flex: 1,
+                            minHeight: '34px',
+                            height: '34px',
+                            fontSize: '12px',
+                            background: '#D97706',
+                            borderColor: '#D97706',
+                            color: '#fff',
+                            fontWeight: '700'
+                          }}
+                          onClick={() => {
+                            setSelectedConnectBuddy(newbiePrimaryBuddy.member);
+                            setShowConnectSheet(true);
+                          }}
+                        >
+                          🤝 Kết nối nhanh
+                        </button>
+                      </div>
+                    </section>
+                  )}
+
                   {/* Count badge */}
                   {rankedCandidates.length > 0 && (
                     <p style={{ fontSize: 11.5, color: 'var(--muted)', marginBottom: 10, textAlign: 'right' }}>
@@ -4024,18 +1979,8 @@ export default function App() {
                             style={{ cursor: 'pointer' }}
                             onClick={() => {
                               bridge.haptic('light');
-                              let targetTag = null;
-                              if (exactMatches.length > 0) {
-                                targetTag = exactMatches[0];
-                              } else {
-                                const memberTags = tags.map(code => FLAT_TAGS.find(t => t.code === code)).filter(Boolean);
-                                const myParentCodes = (myTags || []).map(code => FLAT_TAGS.find(t => t.code === code)?.parent_code).filter(Boolean);
-                                targetTag = memberTags.find(tagObj => myParentCodes.includes(tagObj.parent_code)) || memberTags[0] || FLAT_TAGS[0];
-                              }
-                              if (targetTag) {
-                                setQuickInviteData({ member, tagCode: targetTag.code, tagName: targetTag.name });
-                                setQuickInviteTime(quickTimeOptions[0]?.value || '');
-                              }
+                              setSelectedConnectBuddy(member);
+                              setShowConnectSheet(true);
                             }}
                           >
                             <div className="buddy-card-main">
@@ -4045,14 +1990,7 @@ export default function App() {
                               
                               <div className="buddy-body-compact">
                                 <div className="buddy-header-row">
-                                  <h4 className="buddy-name-compact" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
-                                    {member.full_name}
-                                    {(profile.reputation_score ?? 100) >= 120 && (
-                                      <span className="reputation-badge-radar" title={rooms.filter(r => r.host_id === member.user_id && r.status !== 'cancelled').length >= 5 ? 'Host gương mẫu' : 'Đồng đội uy tín'}>
-                                        {rooms.filter(r => r.host_id === member.user_id && r.status !== 'cancelled').length >= 5 ? '👑 Host gương mẫu' : '🌟 Đồng đội uy tín'}
-                                      </span>
-                                    )}
-                                  </h4>
+                                  <h4 className="buddy-name-compact">{member.full_name}</h4>
                                   <span className={`buddy-match-badge ${matchScore >= 80 ? 'buddy-match-badge--premium' : ''}`}>
                                     {matchScore >= 80 ? '✨ ' : ''}{matchScore}% Match
                                   </span>
@@ -4097,8 +2035,8 @@ export default function App() {
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         bridge.haptic('light');
-                                        setQuickInviteData({ member, tagCode: tag.code, tagName: tag.name });
-                                        setQuickInviteTime(quickTimeOptions[0]?.value || '');
+                                        setSelectedConnectBuddy(member);
+                                        setShowConnectSheet(true);
                                       }}
                                       title={`Rủ nhanh ${member.full_name} cùng chơi ${tag.name}`}
                                     >
@@ -4161,2476 +2099,577 @@ export default function App() {
             </div>
           )}
 
-          {/* TAB 2: ROOMS - PHÒNG HẸN KẾT NỐI */}
-          {activeTab === 'rooms' && (
-            <div className="tab-pane animated-fade-in">
-              <div className="compact-tab-header">
-                <div className="radar-pulse-wrapper" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, width: 24, height: 24 }}>
-                  🏆
+          {/* TAB 3: CONNECTIONS - DANH SÁCH KẾT NỐI & ĐIỂM SỐ */}
+          {activeTab === 'connections' && (
+            <div className="tab-pane animated-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              
+              {/* Point Card & Badge Level */}
+              <div className="mushy-card" style={{
+                background: 'linear-gradient(135deg, rgba(255,255,255,0.7) 0%, rgba(255,240,242,0.8) 100%)',
+                border: '1.5px solid rgba(255, 77, 109, 0.15)',
+                borderRadius: '24px',
+                padding: '22px 20px',
+                boxShadow: '0 10px 30px rgba(230, 57, 70, 0.05)',
+                textAlign: 'center'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'center', gap: '24px', alignItems: 'center', marginBottom: '14px' }}>
+                  <div>
+                    <div style={{ fontSize: '32px', fontWeight: '900', color: 'var(--brand)', lineHeight: '1.1' }}>
+                      {myPoints.points}
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'var(--muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '2px' }}>
+                      Điểm Kết Nối
+                    </div>
+                  </div>
+                  <div style={{ height: '32px', width: '1.5px', background: 'rgba(230, 57, 70, 0.15)' }} />
+                  <div>
+                    <div style={{ fontSize: '24px', fontWeight: '800', color: '#1E293B', lineHeight: '1.1' }}>
+                      {myPoints.confirmed_1to1_count}
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'var(--muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '4px' }}>
+                      Cuộc Gặp 1-1
+                    </div>
+                  </div>
                 </div>
-                <div className="radar-text-wrapper" style={{ flex: 1 }}>
-                  <h4 className="compact-radar-title" style={{ margin: 0, fontSize: '13.5px', fontWeight: 700 }}>Phòng hẹn Connect</h4>
-                  <p className="compact-radar-sub" style={{ margin: '1px 0 0', fontSize: '11px', color: 'var(--muted)' }}>Tự lập hoặc tham gia phòng đi chơi, thể thao cùng đồng nghiệp</p>
-                </div>
-                <div className="compact-radar-action">
-                  <button
-                    className={`mushy-btn ${showCreateRoom ? 'mushy-btn--ghost' : 'mushy-btn--primary'}`}
-                    style={{ 
-                      padding: '6px 12px', 
-                      minHeight: 30,
-                      fontSize: '11.5px',
-                      fontWeight: 700,
-                      borderRadius: 999,
-                      color: showCreateRoom ? 'var(--brand)' : '#fff',
-                      borderColor: showCreateRoom ? 'var(--brand)' : undefined,
-                      background: showCreateRoom ? 'transparent' : 'linear-gradient(135deg, var(--brand) 0%, var(--pink) 100%)',
-                      boxShadow: showCreateRoom ? 'none' : '0 2px 8px rgba(230, 57, 70, 0.2)'
-                    }}
-                    onClick={() => {
-                      bridge.haptic('light');
-                      setShowCreateRoom(!showCreateRoom);
-                    }}
-                  >
-                    {showCreateRoom ? 'Hủy' : '+ Lập Kèo'}
-                  </button>
-                </div>
-              </div>
 
-              {/* Create Room Form Card */}
-              {showCreateRoom && (
-                <section className="mushy-card premium-glow-card form-slide-down" style={{ marginBottom: 16, padding: '16px 20px' }}>
-                  <form onSubmit={handleCreateRoomSubmit}>
-                    <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
-                      <div style={{ flex: 1 }}>
-                        <label className="mushy-label" style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginLeft: '6px', marginBottom: '5px', minHeight: '28px' }}>Danh mục chính</label>
-                        <Select
-                          value={selectedParentCode}
-                          onChange={handleParentChange}
-                          options={TAXONOMY.map(p => ({ value: p.parent_code, label: p.parent_name }))}
-                        />
-                      </div>
-                      <div style={{ flex: 1 }}>
-                        <label className="mushy-label" style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginLeft: '6px', marginBottom: '5px', minHeight: '28px' }}>Bộ môn / Sở thích cụ thể</label>
-                        <Select
-                          value={newRoom.child_code}
-                          onChange={(val) => setNewRoom(prev => ({ ...prev, child_code: val }))}
-                          options={availableChildOptions}
-                        />
-                      </div>
-                    </div>
+                {/* Huy chương */}
+                {(() => {
+                  const badge = myPoints.helper_badge_level;
+                  let gradient = 'linear-gradient(135deg, #E2E8F0 0%, #CBD5E1 100%)';
+                  let label = 'Chưa có Huy chương';
+                  let emoji = '🎗️';
+                  let nextTargetText = 'Tích lũy 30 điểm để đạt Huy chương Đồng';
 
-                    <div style={{ marginBottom: 12 }}>
-                      <label className="mushy-label" style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginLeft: '6px', marginBottom: '5px', minHeight: '28px' }}>Vị trí / Địa điểm hẹn</label>
-                      <input
-                        type="text"
-                        className="mushy-input"
-                        placeholder="Vd: Sân cầu lông Thượng Đình, 345 Nguyễn Trãi..."
-                        value={newRoom.location}
-                        onChange={(e) => setNewRoom(prev => ({ ...prev, location: e.target.value }))}
-                        style={{ borderRadius: '14px', border: '1.5px solid var(--hairline)', padding: '10px 14px', fontSize: '13.5px', minHeight: '44px', width: '100%', outline: 'none' }}
-                        required
-                      />
-                    </div>
+                  if (badge === 'gold') {
+                    gradient = 'linear-gradient(135deg, #FDE047 0%, #EAB308 100%)';
+                    label = 'Huy chương Vàng';
+                    emoji = '🥇';
+                    nextTargetText = 'Bạn đã đạt cấp độ kết nối cao nhất! 🎉';
+                  } else if (badge === 'silver') {
+                    gradient = 'linear-gradient(135deg, #E2E8F0 0%, #94A3B8 100%)';
+                    label = 'Huy chương Bạc';
+                    emoji = '🥈';
+                    nextTargetText = 'Tích lũy thêm ' + (100 - myPoints.points) + ' điểm để đạt Huy chương Vàng';
+                  } else if (badge === 'bronze') {
+                    gradient = 'linear-gradient(135deg, #FED7AA 0%, #EA580C 100%)';
+                    label = 'Huy chương Đồng';
+                    emoji = '🥉';
+                    nextTargetText = 'Tích lũy thêm ' + (60 - myPoints.points) + ' điểm để đạt Huy chương Bạc';
+                  }
 
-                    <div style={{ marginBottom: 12 }}>
-                      <label className="mushy-label" style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginLeft: '6px', marginBottom: '5px', minHeight: '28px' }}>Thời gian hẹn tổ chức</label>
-                      <input
-                        type="datetime-local"
-                        className="mushy-input"
-                        style={{ borderRadius: '14px', border: '1.5px solid var(--hairline)', padding: '10px 14px', fontSize: '13.5px', minHeight: '44px', width: '100%', outline: 'none' }}
-                        value={newRoom.scheduled_at}
-                        onChange={(e) => setNewRoom(prev => ({ ...prev, scheduled_at: e.target.value }))}
-                        required
-                      />
-                      <div style={{ display: 'flex', gap: 6, overflowX: 'auto', padding: '4px 2px', marginTop: 6, scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                        <button type="button" onClick={() => setQuickTime('today_19')} style={{ flexShrink: 0, fontSize: 11, padding: '6px 12px', background: 'rgba(15,15,18,0.03)', border: '1px solid var(--hairline)', borderRadius: 10, color: 'var(--muted)', cursor: 'pointer', transition: 'all 0.2s' }}>Tối nay 19h</button>
-                        <button type="button" onClick={() => setQuickTime('today_20')} style={{ flexShrink: 0, fontSize: 11, padding: '6px 12px', background: 'rgba(15,15,18,0.03)', border: '1px solid var(--hairline)', borderRadius: 10, color: 'var(--muted)', cursor: 'pointer', transition: 'all 0.2s' }}>Tối nay 20h</button>
-                        <button type="button" onClick={() => setQuickTime('tomorrow_8')} style={{ flexShrink: 0, fontSize: 11, padding: '6px 12px', background: 'rgba(15,15,18,0.03)', border: '1px solid var(--hairline)', borderRadius: 10, color: 'var(--muted)', cursor: 'pointer', transition: 'all 0.2s' }}>Sáng mai 8h</button>
-                        <button type="button" onClick={() => setQuickTime('tomorrow_17')} style={{ flexShrink: 0, fontSize: 11, padding: '6px 12px', background: 'rgba(15,15,18,0.03)', border: '1px solid var(--hairline)', borderRadius: 10, color: 'var(--muted)', cursor: 'pointer', transition: 'all 0.2s' }}>Chiều mai 17h</button>
-                        <button type="button" onClick={() => setQuickTime('weekend_9')} style={{ flexShrink: 0, fontSize: 11, padding: '6px 12px', background: 'rgba(15,15,18,0.03)', border: '1px solid var(--hairline)', borderRadius: 10, color: 'var(--muted)', cursor: 'pointer', transition: 'all 0.2s' }}>T7/CN 9h sáng</button>
-                      </div>
-                    </div>
-
-                    <div style={{ marginBottom: 12 }}>
-                      <label className="mushy-label" style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginLeft: '6px', marginBottom: '5px', minHeight: '28px' }}>Sĩ số tối đa</label>
-                      <input
-                        type="number"
-                        className="mushy-input"
-                        min="2"
-                        style={{ borderRadius: '14px', border: '1.5px solid var(--hairline)', padding: '10px 14px', fontSize: '13.5px', minHeight: '44px', width: '100%', outline: 'none' }}
-                        value={newRoom.max_participants}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setNewRoom(prev => ({ ...prev, max_participants: val === '' ? '' : (parseInt(val) || '') }));
-                        }}
-                        required
-                      />
-                    </div>
-
-                    {/* Quota multiplier stepper */}
-                    <div style={{ marginBottom: 12 }}>
-                      <label className="mushy-label" style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginLeft: '6px', marginBottom: '5px', minHeight: '28px' }}>Hạn ngạch lời mời chờ tối đa</label>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', background: 'rgba(15,15,18,0.02)', border: '1.5px solid var(--hairline)', borderRadius: 14, minHeight: 44 }}>
-                        <button type="button" onClick={() => setQuotaMultiplier(v => Math.max(1, v - 1))} style={{ width: 30, height: 30, borderRadius: '50%', border: '1.5px solid var(--hairline)', background: '#fff', fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>−</button>
-                        <div style={{ flex: 1, textAlign: 'center' }}>
-                          <span style={{ fontSize: 18, fontWeight: 800, color: 'var(--brand)' }}>{createRoomAllowedLimit}</span>
-                          <span style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 4 }}>lời mời</span>
-                          <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 1 }}>{parseInt(newRoom.max_participants)||2} người × {quotaMultiplier} lần/slot = {createRoomAllowedLimit}</div>
-                        </div>
-                        <button type="button" onClick={() => setQuotaMultiplier(v => Math.min(10, v + 1))} style={{ width: 30, height: 30, borderRadius: '50%', border: '1.5px solid var(--hairline)', background: '#fff', fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>+</button>
-                      </div>
-                    </div>
-                    <div style={{ marginBottom: 16 }}>
-                      <label className="mushy-label" style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 6, marginLeft: '6px', marginBottom: 10 }}>
-                        <span style={{ color: 'var(--brand)' }}>⚠️</span> Gửi lời mời đầu tiên (Chọn ít nhất 1 người)
-                      </label>
-                      {members.length > 0 && (
-                        <button
-                          type="button"
-                          className="mushy-btn mushy-btn--ghost"
-                          onClick={() => handleSelectRandomGuests('any', Math.max(0, createRoomAllowedLimit - invitedGuests.length))}
-                          style={{ width: '100%', minHeight: 36, fontSize: 12, marginBottom: 12, borderRadius: 10, color: 'var(--muted)', borderColor: 'var(--hairline)' }}
-                        >
-                          🎲 Ghép ngẫu nhiên lấp đầy hạn ngạch (tối đa {Math.max(0, createRoomAllowedLimit - invitedGuests.length)} người)
-                        </button>
-                      )}
-
-                      {/* ── Suggestion rows ── */}
-                      {(() => {
-                        // Build acquaintances list from interaction history, filtered by selected tag
-                        const acquaintanceMembers = members.filter(m => {
-                          if (m.user_id === ctx.userId) return false;
-                          return interactionHistory.some(h =>
-                            (h.user_id_1 === ctx.userId && h.user_id_2 === m.user_id) ||
-                            (h.user_id_1 === m.user_id && h.user_id_2 === ctx.userId)
-                          );
-                        }).slice(0, 8);
-
-                        const renderChipRow = (list, label, emoji) => {
-                          if (list.length === 0) return null;
-                          return (
-                            <div style={{ marginBottom: 14 }}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, paddingLeft: 4 }}>
-                                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)' }}>
-                                  {emoji} {label} ({list.length})
-                                </span>
-                                <button
-                                  type="button"
-                                  style={{ background: 'none', border: 'none', color: 'var(--brand)', fontSize: 11, fontWeight: 'bold', cursor: 'pointer', padding: 0 }}
-                                  onClick={() => {
-                                    bridge.haptic('light');
-                                    const toAdd = list.map(m => m.user_id).filter(id => !invitedGuests.includes(id));
-                                    const available = createRoomAllowedLimit - invitedGuests.length;
-                                    if (available <= 0) { dialog.error('Hạn ngạch đầy!', `Chỉ có thể mời tối đa ${createRoomAllowedLimit} người.`); return; }
-                                    setInvitedGuests(prev => [...prev, ...toAdd.slice(0, available)]);
-                                  }}
-                                >
-                                  ✨ Chọn tất cả
-                                </button>
-                              </div>
-                              <div style={{ display: 'flex', gap: 12, overflowX: 'auto', padding: '4px 2px 8px', scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                                {list.map(m => {
-                                  const isSelected = invitedGuests.includes(m.user_id);
-                                  const profile = allProfiles[m.user_id];
-                                  let _pt = null;
-                                  const startPress = () => { _pt = setTimeout(() => { bridge.haptic('tooltip_vibe'); setAvatarTooltip({ member: m, profile }); _pt = null; }, 500); };
-                                  const cancelPress = () => { if (_pt) { clearTimeout(_pt); _pt = null; } };
-                                  return (
-                                    <div
-                                      key={m.user_id}
-                                      onMouseDown={startPress} onMouseUp={cancelPress} onMouseLeave={cancelPress}
-                                      onTouchStart={startPress} onTouchEnd={cancelPress} onTouchCancel={cancelPress}
-                                      onClick={() => {
-                                        cancelPress();
-                                        if (avatarTooltip) return;
-                                        bridge.haptic('light');
-                                        if (isSelected) {
-                                          setInvitedGuests(prev => prev.filter(id => id !== m.user_id));
-                                        } else {
-                                          if (invitedGuests.length >= createRoomAllowedLimit) {
-                                            dialog.error('Hạn ngạch đầy!', `Chỉ có thể mời tối đa ${createRoomAllowedLimit} người.`);
-                                            return;
-                                          }
-                                          setInvitedGuests(prev => [...prev, m.user_id]);
-                                        }
-                                      }}
-                                      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, minWidth: 64, cursor: 'pointer', position: 'relative', userSelect: 'none' }}
-                                    >
-                                      <div style={{
-                                        width: 46, height: 46, borderRadius: '50%',
-                                        background: isSelected ? 'linear-gradient(135deg, var(--brand) 0%, var(--pink) 100%)' : getAvatarGradient(m.full_name?.charAt(0)),
-                                        border: isSelected ? '2.5px solid var(--brand)' : '1.5px solid rgba(255,255,255,0.4)',
-                                        boxShadow: isSelected ? '0 0 10px rgba(230,57,70,0.35)' : '0 3px 8px rgba(15,15,18,0.06)',
-                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                        fontSize: 15, fontWeight: 700, color: '#fff',
-                                        transition: 'all 180ms ease', position: 'relative'
-                                      }}>
-                                        <span>{m.full_name?.charAt(0)}</span>
-                                        {isSelected && (
-                                          <div style={{ position: 'absolute', bottom: -2, right: -2, width: 16, height: 16, borderRadius: '50%', background: '#4CAF50', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 'bold', border: '1.5px solid #fff' }}>✓</div>
-                                        )}
-                                      </div>
-                                      <span style={{ fontSize: 10, fontWeight: isSelected ? 700 : 500, color: isSelected ? 'var(--brand)' : 'var(--ink)', textAlign: 'center', maxWidth: 64, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                        {m.full_name}
-                                      </span>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          );
-                        };
-
-                        return (
-                          <>
-                            {renderChipRow(acquaintanceMembers, 'Đã từng kết nối', '🤝')}
-                            {renderChipRow(matchingTagMembers, 'Trùng sở thích', '🔥')}
-                          </>
-                        );
-                      })()}
-
-
-                      {/* Selected Guests Summary Chips */}
-                      {invitedGuests.length > 0 && (
-                        <div style={{ marginBottom: 14, background: 'rgba(230, 57, 70, 0.03)', padding: '10px 12px', borderRadius: '16px', border: '1px solid rgba(230, 57, 70, 0.1)' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, paddingLeft: 2 }}>
-                            <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--brand)' }}>
-                              👥 Đồng nghiệp đã chọn ({invitedGuests.length}):
-                            </span>
-                            <button
-                              type="button"
-                              style={{
-                                background: 'none',
-                                border: 'none',
-                                color: 'var(--muted)',
-                                fontSize: 11,
-                                fontWeight: 'bold',
-                                cursor: 'pointer',
-                                padding: 0
-                              }}
-                              onClick={() => {
-                                bridge.haptic('light');
-                                setInvitedGuests([]);
-                              }}
-                            >
-                              Xóa tất cả
-                            </button>
-                          </div>
-                          
-                          <div 
-                            style={{ 
-                              display: 'flex', 
-                              gap: 12, 
-                              overflowX: 'auto', 
-                              padding: '4px 2px 6px', 
-                              scrollbarWidth: 'none',
-                              msOverflowStyle: 'none'
-                            }}
-                          >
-                            {invitedGuests.map(guestId => {
-                              const m = members.find(member => member.user_id === guestId) || { user_id: guestId, full_name: 'Đồng nghiệp' };
-                              return (
-                                <div
-                                  key={m.user_id}
-                                  style={{
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    alignItems: 'center',
-                                    gap: 5,
-                                    minWidth: 70,
-                                    position: 'relative',
-                                    userSelect: 'none'
-                                  }}
-                                >
-                                  {/* Avatar circle */}
-                                  <div
-                                    style={{
-                                      width: 44,
-                                      height: 44,
-                                      borderRadius: '50%',
-                                      background: getAvatarGradient(m.full_name?.charAt(0)),
-                                      border: '1.5px solid rgba(255, 255, 255, 0.8)',
-                                      boxShadow: '0 4px 8px rgba(15, 15, 18, 0.05)',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      justifyContent: 'center',
-                                      fontSize: 15,
-                                      fontWeight: 700,
-                                      color: '#fff',
-                                      position: 'relative'
-                                    }}
-                                  >
-                                    <span>{m.full_name?.charAt(0)}</span>
-                                    
-                                    {/* Remove badge */}
-                                    <div
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        bridge.haptic('light');
-                                        setInvitedGuests(prev => prev.filter(id => id !== m.user_id));
-                                      }}
-                                      style={{
-                                        position: 'absolute',
-                                        top: -3,
-                                        right: -3,
-                                        width: 16,
-                                        height: 16,
-                                        borderRadius: '50%',
-                                        background: 'var(--brand)',
-                                        color: '#fff',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        fontSize: 9,
-                                        fontWeight: 'bold',
-                                        border: '1.5px solid #fff',
-                                        cursor: 'pointer',
-                                        boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-                                      }}
-                                    >
-                                      ✕
-                                    </div>
-                                  </div>
-                                  
-                                  {/* Name */}
-                                  <span
-                                    style={{
-                                      fontSize: 10,
-                                      fontWeight: 600,
-                                      color: 'var(--ink)',
-                                      textAlign: 'center',
-                                      maxWidth: 72,
-                                      overflow: 'hidden',
-                                      textOverflow: 'ellipsis',
-                                      whiteSpace: 'nowrap'
-                                    }}
-                                  >
-                                    {m.full_name}
-                                  </span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Search Bar for manual colleague selector */}
-                      {members.length > 0 && (
-                        <div className="search-box-container" style={{ marginBottom: 10 }}>
-                          <span className="search-icon">🔍</span>
-                          <input
-                            type="text"
-                            placeholder="Gõ tìm kiếm tên đồng nghiệp khác..."
-                            className="mushy-input search-input"
-                            style={{ minHeight: 38, paddingLeft: 38, fontSize: '13px', borderRadius: 10 }}
-                            value={guestSearchQuery}
-                            onChange={(e) => setGuestSearchQuery(e.target.value)}
-                          />
-                        </div>
-                      )}
-
-                      {/* Search Results list - Hidden by default unless query is not empty */}
-                      {guestSearchQuery.trim() !== '' ? (
-                        <div className="guest-selector-scroll" style={{ background: 'var(--surface-muted)', border: '1.5px solid var(--hairline)', maxHeight: 200, overflowY: 'auto', borderRadius: 12 }}>
-                          {sortedMembersForCreate.matching.length === 0 && sortedMembersForCreate.others.length === 0 ? (
-                            <div style={{ textAlign: 'center', padding: '16px 8px', color: 'var(--muted)', fontSize: 12, fontStyle: 'italic' }}>
-                              Không tìm thấy kết quả phù hợp.
-                            </div>
-                          ) : (
-                            <>
-                              {sortedMembersForCreate.matching.length > 0 && (
-                                <div style={{ padding: '8px 12px 4px', fontSize: 10, fontWeight: 'bold', color: 'var(--brand)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                                  🔥 Trùng sở thích ({sortedMembersForCreate.matching.length})
-                                </div>
-                              )}
-                              {sortedMembersForCreate.matching.map(item => {
-                                const m = item.member;
-                                const isSelected = invitedGuests.includes(m.user_id);
-                                return (
-                                  <div
-                                    key={m.user_id}
-                                    className={`guest-select-item ${isSelected ? 'guest-select-item--selected' : ''}`}
-                                    style={{ borderLeft: '3px solid var(--brand)', marginLeft: 4, marginRight: 4 }}
-                                    onClick={() => {
-                                      bridge.haptic('light');
-                                      if (isSelected) {
-                                        setInvitedGuests(prev => prev.filter(id => id !== m.user_id));
-                                      } else {
-                                        if (invitedGuests.length >= createRoomAllowedLimit) {
-                                          dialog.error('Hạn ngạch đầy!', `Chỉ có thể mời tối đa ${createRoomAllowedLimit} người cho phòng này.`);
-                                          return;
-                                        }
-                                        setInvitedGuests(prev => [...prev, m.user_id]);
-                                      }
-                                    }}
-                                  >
-                                    <div>
-                                      <span style={{ fontSize: 13, fontWeight: 700 }}>
-                                        {m.full_name}
-                                        {item.hasInteracted ? (
-                                          <span style={{ fontSize: 9.5, padding: '1px 6px', background: 'rgba(230, 57, 70, 0.08)', color: 'var(--brand)', borderRadius: 4, marginLeft: 6, fontWeight: 'bold' }}>👥 Quen</span>
-                                        ) : (
-                                          <span style={{ fontSize: 9.5, padding: '1px 6px', background: 'rgba(6, 182, 212, 0.08)', color: '#06B6D4', borderRadius: 4, marginLeft: 6, fontWeight: 'bold' }}>🕵️ Lạ</span>
-                                        )}
-                                      </span>
-                                      <span style={{ fontSize: 10, color: 'var(--muted)', display: 'block' }}>🔥 Trùng tag: {getTagName(newRoom.child_code)}</span>
-                                    </div>
-                                    <input
-                                      type="checkbox"
-                                      checked={isSelected}
-                                      readOnly
-                                      style={{ accentColor: 'var(--brand)' }}
-                                    />
-                                  </div>
-                                );
-                              })}
-
-                              {sortedMembersForCreate.matching.length > 0 && sortedMembersForCreate.others.length > 0 && (
-                                <div style={{ margin: '8px 12px 4px', borderTop: '1px solid var(--hairline)' }} />
-                              )}
-
-                              {sortedMembersForCreate.others.length > 0 && (
-                                <div style={{ padding: '8px 12px 4px', fontSize: 10, fontWeight: 'bold', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                                  👥 Thành viên khác ({sortedMembersForCreate.others.length})
-                                </div>
-                              )}
-                              {sortedMembersForCreate.others.map(item => {
-                                const m = item.member;
-                                const isSelected = invitedGuests.includes(m.user_id);
-                                return (
-                                  <div
-                                    key={m.user_id}
-                                    className={`guest-select-item ${isSelected ? 'guest-select-item--selected' : ''}`}
-                                    style={{ marginLeft: 4, marginRight: 4 }}
-                                    onClick={() => {
-                                      bridge.haptic('light');
-                                      if (isSelected) {
-                                        setInvitedGuests(prev => prev.filter(id => id !== m.user_id));
-                                      } else {
-                                        if (invitedGuests.length >= createRoomAllowedLimit) {
-                                          dialog.error('Hạn ngạch đầy!', `Chỉ có thể mời tối đa ${createRoomAllowedLimit} người cho phòng này.`);
-                                          return;
-                                        }
-                                        setInvitedGuests(prev => [...prev, m.user_id]);
-                                      }
-                                    }}
-                                  >
-                                    <div>
-                                      <span style={{ fontSize: 13, fontWeight: 500 }}>
-                                        {m.full_name}
-                                        {item.hasInteracted ? (
-                                          <span style={{ fontSize: 9.5, padding: '1px 6px', background: 'rgba(230, 57, 70, 0.08)', color: 'var(--brand)', borderRadius: 4, marginLeft: 6, fontWeight: 'bold' }}>👥 Quen</span>
-                                        ) : (
-                                          <span style={{ fontSize: 9.5, padding: '1px 6px', background: 'rgba(6, 182, 212, 0.08)', color: '#06B6D4', borderRadius: 4, marginLeft: 6, fontWeight: 'bold' }}>🕵️ Lạ</span>
-                                        )}
-                                      </span>
-                                    </div>
-                                    <input
-                                      type="checkbox"
-                                      checked={isSelected}
-                                      readOnly
-                                      style={{ accentColor: 'var(--brand)' }}
-                                    />
-                                  </div>
-                                );
-                              })}
-                            </>
-                          )}
-                        </div>
-                      ) : (
-                        <div style={{ 
-                          textAlign: 'center', 
-                          padding: '12px 14px', 
-                          color: 'var(--muted)', 
-                          fontSize: '11.5px',
-                          background: 'rgba(15,15,18,0.02)',
-                          borderRadius: 12,
-                          border: '1px dashed var(--hairline)',
-                          marginTop: 4
+                  return (
+                    <div style={{
+                      background: 'rgba(255,255,255,0.6)',
+                      borderRadius: '16px',
+                      padding: '12px 14px',
+                      border: '1px solid rgba(15,15,18,0.04)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontSize: '20px' }}>{emoji}</span>
+                        <span style={{
+                          fontWeight: '800',
+                          fontSize: '13.5px',
+                          background: gradient,
+                          WebkitBackgroundClip: 'text',
+                          WebkitTextFillColor: 'transparent'
                         }}>
-                          💡 Gõ tên vào ô tìm kiếm trên để tìm & mời thêm đồng nghiệp khác ngoài sở thích.
-                        </div>
-                      )}
-
-                      {/* Thống kê hạn ngạch */}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 11, color: 'var(--muted)' }}>
-                        <span>Đã chọn: <strong>{invitedGuests.length}</strong> người</span>
-                        <span className={invitedGuests.length > createRoomAllowedLimit ? 'quota-indicator--warning' : ''}>
-                          Hạn ngạch pending tối đa: <strong>{createRoomAllowedLimit}</strong> người
+                          {label}
                         </span>
                       </div>
-                      {invitedGuests.length > createRoomAllowedLimit && (
-                        <div style={{ marginTop: 6, fontSize: 11, color: 'var(--danger)', fontWeight: 600 }}>
-                          ⚠️ Số người được mời vượt hạn ngạch tối đa. Vui lòng bỏ chọn bớt hoặc nâng sĩ số phòng!
-                        </div>
-                      )}
-                    </div>
-
-                    <button
-                      type="submit"
-                      className="mushy-btn mushy-btn--primary mushy-btn--block"
-                      disabled={submittingRoom || invitedGuests.length === 0 || invitedGuests.length > createRoomAllowedLimit}
-                    >
-                      {submittingRoom ? <span className="mushy-spinner" /> : 'Xác nhận tạo phòng & Gửi lời mời 🚀'}
-                    </button>
-                  </form>
-                </section>
-              )}
-
-              {/* Rooms list */}
-              {(() => {
-                const userRooms = rooms.filter(room => {
-                  if (hiddenRoomIds.includes(room.id)) return false;
-                  const isHost = room.host_id === ctx.userId;
-                  const hasJoined = invitations.some(i => i.room_id === room.id && i.receiver_id === ctx.userId && i.status === 'accepted');
-                  return isHost || hasJoined;
-                });
-
-                if (userRooms.length === 0) {
-                  return (
-                    <div className="mushy-empty-state animated-fade-in">
-                      <div className="mushy-empty-icon">🏆✨</div>
-                      <h4 className="mushy-empty-title">Bạn chưa tham gia phòng hẹn nào</h4>
-                      <p className="mushy-empty-desc">Nhấn "+ Lập Kèo" để tự tạo phòng mới hoặc nhận lời mời từ đồng nghiệp để cùng tham gia nhé!</p>
+                      <p style={{ margin: 0, fontSize: '11px', color: 'var(--muted)' }}>
+                        {nextTargetText}
+                      </p>
                     </div>
                   );
-                }
+                })()}
+              </div>
 
-                // Sắp xếp phòng theo thời gian hoạt động chat/tạo phòng mới nhất lên đầu
-                const sortedRooms = [...userRooms].sort((a, b) => {
-                  const getRoomActivityTime = (r) => {
-                    const messages = parseChatMessages(r.chat_group_id);
-                    if (messages.length > 0) {
-                      const lastMsg = messages[messages.length - 1];
-                      return new Date(lastMsg.timestamp).getTime();
-                    }
-                    return new Date(r.created_at || r.scheduled_at).getTime();
-                  };
-                  return getRoomActivityTime(b) - getRoomActivityTime(a);
+              {/* Confirmation Prompt Carousel / List */}
+              {(() => {
+                const pendingConfirmationMeetings = connectionMeetings.filter(m => {
+                  if (m.status !== 'pending_confirmation') return false;
+                  const req = connectionRequests.find(r => r.id === m.request_id);
+                  if (!req) return false;
+                  
+                  const isFrom = ctx.userId === req.from_user_id;
+                  const isTo = ctx.userId === req.to_user_id;
+                  
+                  return (isFrom && !m.from_confirmed) || (isTo && !m.to_confirmed);
                 });
 
-                return sortedRooms.map(room => {
-                  const isHost = room.host_id === ctx.userId;
-                  const roomInvs = invitations.filter(i => i.room_id === room.id);
-                  const acceptedCount = roomInvs.filter(i => i.status === 'accepted').length;
-                  const totalJoined = acceptedCount + 1; // including Host
-                  const isFull = totalJoined >= room.max_participants;
-                  
-                  const hostMemberObj = members.find(m => m.user_id === room.host_id) || (isHost ? { full_name: 'Bạn' } : { full_name: 'Đồng nghiệp' });
+                if (pendingConfirmationMeetings.length === 0) return null;
 
-                  // 6.2 Rate limit parameters
-                  const pendingCount = roomInvs.filter(i => i.status === 'pending').length;
-                  const currentLimit = getOutboundLimit(room);
-                  const isQuotaExceeded = pendingCount >= currentLimit;
+                return (
+                  <section>
+                    <h4 className="chip-group-title" style={{ margin: '0 0 10px 6px' }}>
+                      🔔 Xác nhận cuộc gặp
+                    </h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      {pendingConfirmationMeetings.map(meeting => {
+                        const req = connectionRequests.find(r => r.id === meeting.request_id);
+                        const buddyId = req.from_user_id === ctx.userId ? req.to_user_id : req.from_user_id;
+                        const buddy = members.find(m => m.user_id === buddyId) || { full_name: 'Đồng nghiệp' };
+                        const typeLabel = getConnectTypeLabel(req.action_type);
 
-                  return (
-                    <div 
-                      key={room.id} 
-                      id={`room-card-${room.id}`}
-                      className={`mushy-card activity-card ${highlightedRoomId === room.id ? 'room-card--highlighted' : ''}`} 
-                      style={{ 
-                        marginBottom: 14,
-                        transition: 'all 0.6s cubic-bezier(0.16, 1, 0.3, 1)',
-                        ...(highlightedRoomId === room.id ? {
-                          borderColor: 'var(--brand)',
-                          boxShadow: '0 0 0 2.5px var(--brand), 0 10px 32px rgba(230, 57, 70, 0.22)',
-                          transform: 'scale(1.03) translate3d(0,0,0)',
-                          background: 'rgba(230, 57, 70, 0.02)'
-                        } : {})
-                      }}
-                    >
-                      <div className={`activity-type-banner act-badge-sports`}>
-                        {FLAT_TAGS.find(t => t.code === room.child_code)?.name?.charAt(0) || '🏸'}
-                      </div>
-                      <h4 className="activity-title" style={{ fontSize: 16 }}>
-                        {getTagName(room.child_code)} · {room.location}
-                      </h4>
-                      <p className="activity-desc" style={{ fontSize: 12, margin: '4px 0 8px' }}>
-                        Host bởi: <strong>{hostMemberObj.full_name}</strong>
-                      </p>
-
-                      <div className="activity-meta-row">
-                        <div className="activity-meta-item">
-                          <span>⏰ Hẹn vào:</span> <strong>{formatTime(room.scheduled_at)}</strong>
-                        </div>
-                      </div>
-
-                      {/* Display Room state (PRD Section 6.1) */}
-                      <div style={{ marginTop: 6, display: 'flex', gap: 6, alignItems: 'center' }}>
-                        {room.status === 'open' && <span className="mushy-status --warn" style={{ fontSize: 11, padding: '2px 8px' }}><span className="mushy-status-dot" />Mới lập (open)</span>}
-                        {room.status === 'filling' && <span className="mushy-status --warn" style={{ fontSize: 11, padding: '2px 8px', background: 'rgba(6,182,212,0.1)', color: '#06B6D4' }}><span className="mushy-status-dot" style={{ background: '#06B6D4' }} />Đang gom slot ({totalJoined}/{room.max_participants})</span>}
-                        {room.status === 'matched' && <span className="mushy-status --ok" style={{ fontSize: 11, padding: '2px 8px' }}><span className="mushy-status-dot" />Đã ghép đủ (matched)</span>}
-                        {room.status === 'cancelled' && <span className="mushy-status --err" style={{ fontSize: 11, padding: '2px 8px' }}><span className="mushy-status-dot" />Đã hủy</span>}
-                        {room.status === 'expired' && <span className="mushy-status --err" style={{ fontSize: 11, padding: '2px 8px', background: '#E5E7EB', color: '#9CA3AF' }}><span className="mushy-status-dot" style={{ background: '#9CA3AF' }} />Hết hạn</span>}
-                      </div>
-
-                      {room.status === 'cancelled' && room.cancel_reason && (
-                        <div style={{ marginTop: 8, fontSize: 12, color: 'var(--danger)', fontStyle: 'italic' }}>
-                          Lý do hủy: "{room.cancel_reason}"
-                        </div>
-                      )}
-
-                      {/* Members Avatars Joined */}
-                      <div className="participants-container">
-                        <div className="participants-avatars">
-                          <div className="participant-avatar-icon" title="Host">
-                            <span>👑</span>
-                          </div>
-                          {roomInvs.filter(i => i.status === 'accepted').map(inv => {
-                            const guest = members.find(m => m.user_id === inv.receiver_id) || (inv.receiver_id === ctx.userId ? { full_name: 'Bạn' } : { full_name: 'Đồng nghiệp' });
-                            return (
-                              <div key={inv.id} className="participant-avatar-icon" title={guest.full_name}>
-                                <span>{guest.full_name?.charAt(0)}</span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                        <span className="participants-status-text">
-                          Sĩ số: {totalJoined} / {room.max_participants}
-                        </span>
-</div>
-
-                      {/* Check-in and Roll Call Section */}
-                      {room.status === 'matched' && (
-                        <div style={{ marginTop: 12, background: 'rgba(79, 70, 229, 0.06)', border: '1px solid rgba(79, 70, 229, 0.15)', borderRadius: 10, padding: '10px 12px' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
-                            <span style={{ fontSize: 12, color: 'var(--brand)', fontWeight: 600 }}>🛡️ Điểm Uy Tín:</span>
-                            {isHost ? (
-                              room.roll_call_done ? (
-                                <span style={{ fontSize: 12, color: '#10B981', fontWeight: 700 }}>✓ Đã hoàn thành điểm danh</span>
-                              ) : (
-                                <button
-                                  type="button"
-                                  className="mushy-btn"
-                                  style={{ minHeight: 30, fontSize: 11, padding: '4px 10px', background: 'linear-gradient(135deg, var(--brand) 0%, var(--pink) 100%)', color: '#fff', border: 'none', margin: 0 }}
-                                  onClick={() => {
-                                    bridge.haptic('light');
-                                    setShowRollCallModal(room);
-                                    setRollCallAttended([room.host_id, ...(roomInvs.filter(i => i.status === 'accepted' && (room.checked_in_users || []).includes(i.receiver_id)).map(i => i.receiver_id))]);
-                                    setRollCallNoShow([]);
-                                  }}
-                                >
-                                  📋 Điểm danh thành viên
-                                </button>
-                              )
-                            ) : (
-                              (() => {
-                                const hasCheckedIn = (room.checked_in_users || []).includes(ctx.userId);
-                                const isNoShow = (room.no_shows || []).includes(ctx.userId);
-                                if (hasCheckedIn) {
-                                  return <span style={{ fontSize: 12, color: '#10B981', fontWeight: 700 }}>✓ Bạn đã điểm danh thành công</span>;
-                                }
-                                if (isNoShow) {
-                                  return <span style={{ fontSize: 12, color: 'var(--danger)', fontWeight: 700 }}>🚨 Bạn bị báo cáo bùng kèo (-15đ)</span>;
-                                }
-                                
-                                const now = new Date();
-                                const sched = new Date(room.scheduled_at);
-                                const windowStart = new Date(sched.getTime() - 30 * 60 * 1000); // 30 mins before
-                                const windowEnd = new Date(sched.getTime() + 2 * 60 * 60 * 1000); // 2 hours after
-                                
-                                const canCheckIn = now >= windowStart && now <= windowEnd;
-                                
-                                if (canCheckIn) {
-                                  return (
-                                    <button
-                                      type="button"
-                                      className="mushy-btn"
-                                      style={{ minHeight: 30, fontSize: 11, padding: '4px 10px', background: '#4F46E5', color: '#fff', border: 'none', margin: 0 }}
-                                      onClick={() => handleSelfCheckIn(room)}
-                                    >
-                                      📍 Tự check-in (+5đ)
-                                    </button>
-                                  );
-                                } else if (now < windowStart) {
-                                  return <span style={{ fontSize: 11, color: 'var(--muted)' }}>Check-in mở trước giờ hẹn 30 phút</span>;
-                                } else {
-                                  return <span style={{ fontSize: 11, color: 'var(--danger)' }}>Đã hết hạn tự check-in</span>;
-                                }
-                              })()
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* 7.1 Distributed Fault-Tolerance Group Chat Status */}
-                      {((room.status === 'matched' || room.status === 'filling' || isFull || totalJoined > 1) && 
-                        room.status !== 'cancelled' && room.status !== 'expired') && (
-                        <div style={{ marginTop: 12, background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.15)', borderRadius: 10, padding: '8px 12px' }}>
-                          {room.chat_group_id ? (
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <span style={{ fontSize: 12, color: '#10B981', fontWeight: 600 }}>💬 Nhóm chat Super App đã sẵn sàng!</span>
-                              <div style={{ position: 'relative', display: 'inline-block' }}>
-                                <button
-                                  className="mushy-btn"
-                                  style={{ minHeight: 30, fontSize: 11, padding: '4px 10px', background: '#10B981', color: '#fff' }}
-                                  onClick={() => {
-                                    bridge.haptic('light');
-                                    setActiveChatRoom(room);
-                                    if (isInShell()) {
-                                      callNative('OPEN_CHAT_GROUP', { chatGroupId: room.chat_group_id });
-                                    }
-                                  }}
-                                >
-                                  Vào Chat
-                                </button>
-                                {hasUnreadMessages(room) && (
-                                  <span className="notification-dot" style={{
-                                    position: 'absolute',
-                                    top: -4,
-                                    right: -4,
-                                    width: 8,
-                                    height: 8,
-                                    borderRadius: '50%',
-                                    background: 'var(--brand)',
-                                    border: '1.5px solid #fff',
-                                    boxShadow: '0 1px 3px rgba(230, 57, 70, 0.4)'
-                                  }} />
-                                )}
+                        return (
+                          <div key={meeting.id} className="mushy-card form-slide-down" style={{
+                            background: 'linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%)',
+                            border: '1.5px solid #FCD34D',
+                            padding: '16px 18px',
+                            borderRadius: '20px',
+                            boxShadow: '0 8px 24px rgba(245, 158, 11, 0.08)'
+                          }}>
+                            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                              <span style={{ fontSize: '32px' }}>☕</span>
+                              <div style={{ flex: 1, textAlign: 'left' }}>
+                                <h5 style={{ margin: '0 0 4px', fontSize: '13.5px', fontWeight: '800', color: '#1F2937' }}>
+                                  Bạn và {buddy.full_name} đã gặp nhau chưa?
+                                </h5>
+                                <p style={{ margin: 0, fontSize: '11.5px', color: '#4B5563', lineHeight: '1.4' }}>
+                                  Hình thức: <strong>{typeLabel}</strong>. Xác nhận gặp để nhận ngay 10 điểm kết nối!
+                                </p>
                               </div>
                             </div>
-                          ) : (
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <span style={{ fontSize: 12, color: '#D97706', fontWeight: 600 }}>
-                                {reconnectingRoomId === room.id ? '⏳ Đang thiết lập kết nối lại...' : '⏳ Đang khởi tạo nhóm kết nối...'}
-                              </span>
+                            <div style={{ display: 'flex', gap: '10px', marginTop: '14px', borderTop: '1px solid rgba(245, 158, 11, 0.15)', paddingTop: '12px' }}>
                               <button
-                                className="mushy-btn mushy-btn--ghost"
-                                style={{ minHeight: 30, fontSize: 11, padding: '4px 10px', color: '#D97706', borderColor: '#F59E0B', opacity: reconnectingRoomId === room.id ? 0.6 : 1 }}
-                                disabled={reconnectingRoomId === room.id}
-                                onClick={() => handleReconnectChat(room)}
+                                type="button"
+                                className="mushy-btn mushy-btn--primary"
+                                style={{
+                                  flex: 2,
+                                  minHeight: '34px',
+                                  height: '34px',
+                                  fontSize: '12px',
+                                  background: '#D97706',
+                                  borderColor: '#D97706',
+                                  color: '#fff',
+                                  fontWeight: '800'
+                                }}
+                                onClick={() => handleConfirmMeeting(meeting.id, 'confirmed')}
                               >
-                                {reconnectingRoomId === room.id ? '⏳ Kết nối lại...' : 'Kết nối lại nhóm chat'}
+                                ✓ Đã gặp mặt ngoài đời
+                              </button>
+                              <button
+                                type="button"
+                                className="mushy-btn mushy-btn--ghost"
+                                style={{
+                                  flex: 1,
+                                  minHeight: '34px',
+                                  height: '34px',
+                                  fontSize: '12px',
+                                  color: '#D97706',
+                                  borderColor: '#FCD34D',
+                                  background: 'transparent',
+                                  fontWeight: '600'
+                                }}
+                                onClick={() => handleConfirmMeeting(meeting.id, 'skipped')}
+                              >
+                                Bỏ qua
                               </button>
                             </div>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Host Actions: Invite more or Cancel room */}
-                      {isHost && (room.status === 'open' || room.status === 'filling' || room.status === 'matched') && (
-                        <div style={{ marginTop: 14, borderTop: '1px solid var(--hairline)', paddingTop: 12 }}>
-                          <h5 style={{ margin: '0 0 6px', fontSize: 13, fontWeight: 700 }}>Bảng điều khiển của Host:</h5>
-
-                          {/* Rate limiting indicator */}
-                          <div className="quota-indicator">
-                            Hạn ngạch lời mời pending: <strong>{pendingCount}/{currentLimit}</strong>
                           </div>
+                        );
+                      })}
+                    </div>
+                  </section>
+                );
+              })()}
 
-                          {/* Invite more candidates drop grid */}
-                          {!isFull && room.status !== 'matched' && (() => {
-                            const matching = [];
-                            const others = [];
+              {/* Active Connections & Chat list */}
+              <section>
+                <h4 className="chip-group-title" style={{ margin: '0 0 10px 6px' }}>
+                  💬 Kết nối đã thiết lập
+                </h4>
+                {(() => {
+                  const activeConns = connectionRequests.filter(r => r.status === 'accepted');
 
-                            members.filter(m => !roomInvs.some(i => i.receiver_id === m.user_id)).forEach(m => {
-                              const tags = allUserTags[m.user_id] || [];
-                              if (tags.includes(room.child_code)) {
-                                matching.push({ member: m, isMatch: true });
-                              } else {
-                                others.push({ member: m, isMatch: false });
-                              }
-                            });
+                  if (activeConns.length === 0) {
+                    return (
+                      <div className="mushy-empty-state" style={{ padding: '30px 16px', margin: 0 }}>
+                        <div style={{ fontSize: '32px', marginBottom: '8px' }}>🤝</div>
+                        <h5 className="mushy-empty-title">Chưa có kết nối nào</h5>
+                        <p className="mushy-empty-desc">Chấp nhận lời mời hoặc gửi rủ nhanh để thiết lập kết nối 1-1 và trò chuyện.</p>
+                      </div>
+                    );
+                  }
 
-                            const allCandidates = [...matching, ...others];
-                            const q = inviteSearchQuery.trim().toLowerCase();
-                            const filteredCandidates = allCandidates.filter(c => {
-                              const dept = allProfiles[c.member.user_id]?.department || '';
-                              return !q || c.member.full_name.toLowerCase().includes(q) || dept.toLowerCase().includes(q);
-                            });
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      {activeConns.map(conn => {
+                        const buddyId = conn.from_user_id === ctx.userId ? conn.to_user_id : conn.from_user_id;
+                        const buddy = members.find(m => m.user_id === buddyId) || { full_name: 'Đồng nghiệp' };
+                        const buddyProf = allProfiles[buddyId] || {};
+                        const typeLabel = getConnectTypeLabel(conn.action_type);
+                        const messages = parseChatMessages(conn.chat_group_id);
+                        const hasUnread = messages.length > 0 && messages[messages.length - 1].senderId !== ctx.userId;
 
-                            // Smart limit displayed list to prevent overwhelm
-                            const displayedCandidates = [];
-                            if (q) {
-                              displayedCandidates.push(...filteredCandidates.slice(0, 30));
-                            } else {
-                              displayedCandidates.push(...matching);
-                              displayedCandidates.push(...others.slice(0, 10));
-                            }
-
-                            return (
-                              <div style={{ marginTop: 8 }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, flexWrap: 'wrap', gap: 6 }}>
-                                  <label style={{ fontSize: 11.5, color: 'var(--muted)', display: 'block', margin: 0, fontWeight: 600 }}>Mời thêm ứng viên mới:</label>
-                                  <div style={{ display: 'flex', gap: 6 }}>
-                                    {matching.length > 0 && (
-                                      <button
-                                        type="button"
-                                        className="mushy-btn btn-glow-brand"
-                                        disabled={isQuotaExceeded}
-                                        onClick={() => handleInviteMatchingGuests(room.id)}
-                                        style={{ minHeight: 26, fontSize: 10, padding: '2px 8px' }}
-                                      >
-                                        🔥 Mời tất cả trùng tag ({matching.length})
-                                      </button>
-                                    )}
-                                    {allCandidates.length > 0 && (
-                                      <button
-                                        type="button"
-                                        className="mushy-btn"
-                                        disabled={isQuotaExceeded}
-                                        onClick={() => {
-                                          const remainingQuota = currentLimit - pendingCount;
-                                          handleInviteRandomActiveGuests(room.id, 'any', Math.min(3, remainingQuota));
-                                        }}
-                                        style={{
-                                          minHeight: 26,
-                                          fontSize: 10,
-                                          padding: '2px 8px',
-                                          background: 'rgba(6, 182, 212, 0.08)',
-                                          borderColor: 'rgba(6, 182, 212, 0.3)',
-                                          color: '#06B6D4',
-                                          fontWeight: 'bold'
-                                        }}
-                                      >
-                                        🎲 Mời ngẫu nhiên ({randomMode === 'mix' ? 'mix' : randomMode === 'strangers' ? 'lạ' : 'quen'})
-                                      </button>
-                                    )}
-                                  </div>
+                        return (
+                          <div key={conn.id} className="buddy-card-compact" style={{ padding: '14px 16px', margin: 0 }}>
+                            <div className="buddy-card-main">
+                              <div className="buddy-avatar-compact" style={{
+                                background: getAvatarGradient(buddy.full_name?.charAt(0))
+                              }}>
+                                <span style={{ color: '#fff', fontWeight: 'bold' }}>{buddy.full_name?.charAt(0)}</span>
+                              </div>
+                              <div className="buddy-body-compact" style={{ textAlign: 'left' }}>
+                                <div className="buddy-header-row">
+                                  <h4 className="buddy-name-compact">{buddy.full_name}</h4>
+                                  <span style={{
+                                    fontSize: '10px',
+                                    fontWeight: '700',
+                                    padding: '2px 8px',
+                                    background: 'var(--brand-soft)',
+                                    color: 'var(--brand)',
+                                    borderRadius: '6px'
+                                  }}>
+                                    {typeLabel}
+                                  </span>
                                 </div>
-
-                                {/* Small search input for invitation panel */}
-                                <div style={{ position: 'relative', marginBottom: 8 }}>
-                                  <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: 'var(--muted)', pointerEvents: 'none' }}>🔍</span>
-                                  <input
-                                    type="text"
-                                    className="mushy-input"
-                                    placeholder="Tìm nhanh tên đồng nghiệp muốn mời..."
-                                    value={inviteSearchQuery}
-                                    onChange={(e) => setInviteSearchQuery(e.target.value)}
-                                    style={{ paddingLeft: 26, height: 28, fontSize: 11.5, borderRadius: 8, margin: 0 }}
-                                  />
-                                  {inviteSearchQuery && (
-                                    <button
-                                      type="button"
-                                      onClick={() => setInviteSearchQuery('')}
-                                      style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: 12, padding: 0 }}
-                                    >
-                                      ✕
-                                    </button>
-                                  )}
+                                <div className="buddy-meta-row" style={{ marginTop: '2px' }}>
+                                  <span className="buddy-dept">{buddyProf.department || 'Phòng ban'}</span>
+                                  <span className="buddy-dot-separator">·</span>
+                                  <span className="buddy-facility">{buddyProf.facility || 'Cơ sở'}</span>
                                 </div>
-
-                                {/* Scrollable box for invite candidate list (Vertical rows) */}
-                                <div 
-                                  className="guest-selector-scroll" 
-                                  style={{ 
-                                    maxHeight: 220, 
-                                    overflowY: 'auto',
-                                    display: 'flex', 
-                                    flexDirection: 'column',
-                                    gap: 6, 
-                                    background: 'rgba(15, 15, 18, 0.01)',
-                                    padding: '8px',
-                                    border: '1px solid var(--hairline)',
-                                    borderRadius: '12px'
-                                  }}
-                                >
-                                  {displayedCandidates.length === 0 ? (
-                                    <span style={{ fontSize: 11, fontStyle: 'italic', color: 'var(--muted)', padding: '4px', textAlign: 'center' }}>Không còn thành viên khả dụng hoặc khớp tìm kiếm.</span>
-                                  ) : (
-                                    <>
-                                      {displayedCandidates.map(({ member: m, isMatch }) => {
-                                        const profile = allProfiles[m.user_id] || {};
-                                        return (
-                                          <div
-                                            key={m.user_id}
-                                            style={{
-                                              display: 'flex',
-                                              justifyContent: 'space-between',
-                                              alignItems: 'center',
-                                              padding: '6px 10px',
-                                              background: isMatch ? 'rgba(230, 57, 70, 0.04)' : '#fff',
-                                              border: isMatch ? '1.5px solid rgba(230, 57, 70, 0.2)' : '1px solid var(--hairline)',
-                                              borderRadius: '10px',
-                                              transition: 'all 150ms ease'
-                                            }}
-                                          >
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
-                                              {/* Tiny Initials Avatar */}
-                                              <div style={{
-                                                width: 28,
-                                                height: 28,
-                                                borderRadius: '50%',
-                                                background: isMatch ? 'linear-gradient(135deg, #FF7E5F 0%, #FEB47B 100%)' : 'linear-gradient(135deg, #F1F5F9 0%, #E2E8F0 100%)',
-                                                color: isMatch ? '#fff' : '#64748B',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'center',
-                                                fontSize: 11,
-                                                fontWeight: 'bold',
-                                                flexShrink: 0
-                                              }}>
-                                                {m.full_name?.charAt(0)}
-                                              </div>
-                                              <div style={{ minWidth: 0, flex: 1 }}>
-                                                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--foreground)', display: 'flex', alignItems: 'center', gap: 4 }}>
-                                                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.full_name}</span>
-                                                  {isMatch && (
-                                                    <span style={{
-                                                      fontSize: 8.5,
-                                                      padding: '1px 4px',
-                                                      background: 'var(--brand-soft)',
-                                                      color: 'var(--brand)',
-                                                      borderRadius: 4,
-                                                      fontWeight: 'bold',
-                                                      flexShrink: 0
-                                                    }}>
-                                                      🔥 Trùng tag
-                                                    </span>
-                                                  )}
-                                                </div>
-                                                <div style={{ fontSize: 10, color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                  {profile.department || 'Đồng nghiệp'}
-                                                </div>
-                                              </div>
-                                            </div>
-                                            <button
-                                              type="button"
-                                              className="mushy-btn"
-                                              disabled={isQuotaExceeded}
-                                              onClick={() => handleInviteAdditionalGuest(room.id, m.user_id)}
-                                              style={{
-                                                minHeight: 26,
-                                                fontSize: 10.5,
-                                                padding: '2px 10px',
-                                                background: isMatch ? 'var(--brand)' : 'transparent',
-                                                borderColor: 'var(--brand)',
-                                                color: isMatch ? '#fff' : 'var(--brand)',
-                                                borderRadius: 6,
-                                                fontWeight: 600,
-                                                flexShrink: 0,
-                                                margin: 0
-                                              }}
-                                            >
-                                              Mời
-                                            </button>
-                                          </div>
-                                        );
-                                      })}
-                                      
-                                      {!q && allCandidates.length > displayedCandidates.length && (
-                                        <div style={{ 
-                                          fontSize: 10, 
-                                          color: 'var(--muted)', 
-                                          textAlign: 'center', 
-                                          padding: '4px 0', 
-                                          borderTop: '1px dashed var(--hairline)',
-                                          marginTop: 4
-                                        }}>
-                                          💡 Gợi ý {displayedCandidates.length}/{allCandidates.length} đồng nghiệp. Nhập ô tìm kiếm để lọc thêm...
-                                        </div>
-                                      )}
-                                    </>
-                                  )}
-                                </div>
-
-                                {isQuotaExceeded && (
-                                  <p style={{ fontSize: 10, color: 'var(--danger)', margin: '4px 0 0' }}>
-                                    ⚠️ Đã đạt giới hạn pending ({pendingCount}). Vui lòng thu hồi bớt các lời mời cũ bên dưới để có thể mời tiếp.
+                                {messages.length > 0 && (
+                                  <p style={{
+                                    margin: '6px 0 0',
+                                    fontSize: '11.5px',
+                                    color: hasUnread ? 'var(--brand)' : 'var(--muted)',
+                                    fontWeight: hasUnread ? 'bold' : 'normal',
+                                    textOverflow: 'ellipsis',
+                                    whiteSpace: 'nowrap',
+                                    overflow: 'hidden'
+                                  }}>
+                                    💬 {messages[messages.length - 1].content}
                                   </p>
                                 )}
                               </div>
-                            );
-                          })()}
-
-                          {/* Display pending list with Revoke option */}
-                          {roomInvs.filter(i => i.status === 'pending').length > 0 && (
-                            <div style={{ marginTop: 10 }}>
-                              <span style={{ fontSize: 11, color: 'var(--muted)' }}>Lời mời đang chờ:</span>
-                              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
-                                {roomInvs.filter(i => i.status === 'pending').map(inv => {
-                                  const invitedGuest = members.find(m => m.user_id === inv.receiver_id) || { full_name: 'Ứng viên' };
-                                  return (
-                                    <span key={inv.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'rgba(15,15,18,0.03)', padding: '2px 8px', borderRadius: 6, fontSize: 11 }}>
-                                      {invitedGuest.full_name}
-                                      <button
-                                        style={{ border: 'none', background: 'transparent', color: 'var(--danger)', cursor: 'pointer', padding: 0, fontWeight: 'bold' }}
-                                        onClick={() => handleRevokeInvitation(inv.id)}
-                                      >
-                                        [Thu hồi]
-                                      </button>
-                                    </span>
-                                  );
-                                })}
-                              </div>
                             </div>
-                          )}
-
-                          {/* Withdraw cancellation button */}
-                          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
-                            <button
-                              className="mushy-btn mushy-btn--ghost"
-                              style={{ color: 'var(--danger)', borderColor: 'var(--danger)', minHeight: 36, fontSize: 12, padding: '4px 12px' }}
-                              onClick={() => {
-                                setCancelReason('Bận việc đột xuất');
-                                setShowCancelModal(room);
-                              }}
-                            >
-                              🚨 Hủy phòng hẹn văn minh
-                            </button>
+                            <div className="buddy-actions-compact" style={{ borderTop: '1px solid var(--hairline)', marginTop: '12px', paddingTop: '10px', display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                              <button
+                                type="button"
+                                className="mushy-btn"
+                                style={{
+                                  minHeight: '30px',
+                                  height: '30px',
+                                  fontSize: '11.5px',
+                                  padding: '0 12px',
+                                  background: 'var(--brand)',
+                                  borderColor: 'var(--brand)',
+                                  color: '#fff',
+                                  fontWeight: '700',
+                                  borderRadius: '16px',
+                                  position: 'relative'
+                                }}
+                                onClick={() => {
+                                  bridge.haptic('light');
+                                  setActiveChatConnection(conn);
+                                }}
+                              >
+                                Vào Chat
+                                {hasUnread && (
+                                  <span style={{
+                                    position: 'absolute',
+                                    top: '-4px',
+                                    right: '-4px',
+                                    width: '8px',
+                                    height: '8px',
+                                    borderRadius: '50%',
+                                    background: 'var(--brand)',
+                                    border: '1.5px solid #fff'
+                                  }} />
+                                )}
+                              </button>
+                            </div>
                           </div>
-                        </div>
-                      )}
-
-                      {/* Guest Action: Out kèo / Rút khỏi phòng */}
-                      {!isHost && (room.status === 'open' || room.status === 'filling' || room.status === 'matched') && (
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12, borderTop: '1px solid var(--hairline)', paddingTop: 12 }}>
-                          <button
-                            className="mushy-btn mushy-btn--ghost"
-                            style={{ color: 'var(--danger)', borderColor: 'var(--danger)', minHeight: 36, fontSize: 12, padding: '4px 12px' }}
-                            onClick={() => handleLeaveRoom(room)}
-                          >
-                            🚪 Out kèo / Rút khỏi phòng
-                          </button>
-                        </div>
-                      )}
-
-                      {/* Xóa dọn dẹp kèo cũ đã hủy hoặc hết hạn */}
-                      {(room.status === 'cancelled' || room.status === 'expired') && (
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12, borderTop: '1px solid var(--hairline)', paddingTop: 12 }}>
-                          <button
-                            className="mushy-btn mushy-btn--ghost"
-                            style={{ color: 'var(--danger)', borderColor: 'var(--danger)', minHeight: 36, fontSize: 12, padding: '4px 12px' }}
-                            onClick={() => handleHideOldRoom(room.id)}
-                          >
-                            🗑️ Xóa khỏi danh sách
-                          </button>
-                        </div>
-                      )}
+                        );
+                      })}
                     </div>
                   );
-                })
-              })()}
-            </div>
-          )}
+                })()}
+              </section>
 
-      {/* Create Tournament Modal */}
-      {showCreateTournament && (
-        <div
-          style={{
-            position: 'fixed', inset: 0, zIndex: 9999,
-            background: 'rgba(15, 15, 18, 0.55)',
-            backdropFilter: 'blur(4px)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            padding: 16
-          }}
-        >
-          <div
-            style={{
-              background: 'var(--surface)',
-              borderRadius: 20,
-              padding: '24px 20px',
-              width: '100%',
-              maxWidth: 440,
-              boxShadow: '0 10px 40px rgba(15,15,18,0.2)',
-              border: '1px solid var(--border)'
-            }}
-          >
-            <h4 style={{ margin: '0 0 6px', fontSize: 16, fontWeight: 800, color: 'var(--ink)' }}>🏆 Tạo giải đấu mới</h4>
-            <p style={{ margin: '0 0 16px', fontSize: 12, color: 'var(--muted)' }}>
-              Thiết lập thử thách phong trào thi đua nội bộ trong công ty.
-            </p>
-            
-            <form onSubmit={handleCreateTournamentSubmit}>
-              <div style={{ marginBottom: 12 }}>
-                <label className="mushy-label">Tên giải đấu / Thử thách</label>
-                <input
-                  type="text"
-                  className="mushy-input"
-                  placeholder="Vd: Chạy bộ tích lũy Km, Champion League..."
-                  value={newTournament.title}
-                  onChange={(e) => setNewTournament(prev => ({ ...prev, title: e.target.value }))}
-                  required
-                />
-              </div>
+              {/* Pending Outbox Invites */}
+              <section>
+                <h4 className="chip-group-title" style={{ margin: '0 0 10px 6px' }}>
+                  📤 Yêu cầu đã gửi (Outbox)
+                </h4>
+                {(() => {
+                  const outbox = connectionRequests.filter(r => r.from_user_id === ctx.userId && r.status === 'pending');
 
-              <div style={{ marginBottom: 12 }}>
-                <label className="mushy-label">Mô tả chi tiết</label>
-                <textarea
-                  className="mushy-input"
-                  placeholder="Vd: Mỗi người tham gia chạy tối thiểu 50km trong tháng này để nhận quà..."
-                  value={newTournament.description}
-                  onChange={(e) => setNewTournament(prev => ({ ...prev, description: e.target.value }))}
-                  style={{ minHeight: 60, resize: 'none' }}
-                />
-              </div>
+                  if (outbox.length === 0) {
+                    return (
+                      <div className="mushy-empty-state" style={{ padding: '24px 16px', margin: 0 }}>
+                        <p className="mushy-empty-desc" style={{ fontSize: '11.5px' }}>Chưa gửi lời mời kết nối nào.</p>
+                      </div>
+                    );
+                  }
 
-              <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
-                <div style={{ flex: 1 }}>
-                  <label className="mushy-label">Bộ môn chính</label>
-                  <Select
-                    value={newTournament.sport_code}
-                    onChange={(val) => setNewTournament(prev => ({ ...prev, sport_code: val }))}
-                    options={TAXONOMY.map(p => ({ value: p.parent_code, label: p.parent_name }))}
-                  />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <label className="mushy-label">Chỉ số thi đua</label>
-                  <Select
-                    value={newTournament.target_metric}
-                    onChange={(val) => setNewTournament(prev => ({ ...prev, target_metric: val }))}
-                    options={[
-                      { value: 'km', label: 'Số Km chạy' },
-                      { value: 'matches', label: 'Số trận thắng' },
-                      { value: 'points', label: 'Điểm số đạt' },
-                      { value: 'hours', label: 'Số giờ tập luyện' }
-                    ]}
-                  />
-                </div>
-              </div>
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      {outbox.map(req => {
+                        const buddy = members.find(m => m.user_id === req.to_user_id) || { full_name: 'Đồng nghiệp' };
+                        const buddyProf = allProfiles[req.to_user_id] || {};
+                        const typeLabel = getConnectTypeLabel(req.action_type);
 
-              <div style={{ marginBottom: 12 }}>
-                <label className="mushy-label">Mục tiêu thi đua (Target value)</label>
-                <input
-                  type="number"
-                  className="mushy-input"
-                  placeholder="Vd: 50, 10, 100..."
-                  value={newTournament.target_value}
-                  onChange={(e) => setNewTournament(prev => ({ ...prev, target_value: e.target.value }))}
-                  min="1"
-                  required
-                />
-              </div>
+                        return (
+                          <div key={req.id} className="buddy-card-compact" style={{
+                            background: 'rgba(255,255,255,0.5)',
+                            padding: '12px 14px',
+                            margin: 0,
+                            borderColor: 'rgba(15,15,18,0.05)'
+                          }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <div style={{ textAlign: 'left', minWidth: 0, flex: 1 }}>
+                                <div style={{ fontSize: '13px', fontWeight: '700', color: 'var(--ink)' }}>
+                                  Gửi tới: {buddy.full_name}
+                                </div>
+                                <div style={{ fontSize: '10.5px', color: 'var(--muted)', marginTop: '2px' }}>
+                                  Hình thức: <strong>{typeLabel}</strong> · Trạng thái: <span style={{ color: '#F59E0B', fontWeight: '700' }}>Chờ phản hồi</span>
+                                </div>
+                              </div>
+                              <span style={{ fontSize: '10px', color: 'var(--muted)', flexShrink: 0 }}>
+                                {new Date(req.created_at).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+              </section>
 
-              <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
-                <div style={{ flex: 1 }}>
-                  <label className="mushy-label">Ngày bắt đầu</label>
-                  <input
-                    type="date"
-                    className="mushy-input"
-                    value={newTournament.start_at}
-                    onChange={(e) => setNewTournament(prev => ({ ...prev, start_at: e.target.value }))}
-                    required
-                  />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <label className="mushy-label">Ngày kết thúc</label>
-                  <input
-                    type="date"
-                    className="mushy-input"
-                    value={newTournament.end_at}
-                    onChange={(e) => setNewTournament(prev => ({ ...prev, end_at: e.target.value }))}
-                    required
-                  />
-                </div>
-              </div>
-              
-              <div style={{ display: 'flex', gap: 10 }}>
-                <button
-                  type="button"
-                  className="mushy-btn mushy-btn--ghost"
-                  style={{ flex: 1, minHeight: 38 }}
-                  onClick={() => setShowCreateTournament(false)}
-                >
-                  Hủy bỏ
-                </button>
-                <button
-                  type="submit"
-                  className="mushy-btn mushy-btn--primary"
-                  style={{ flex: 1, minHeight: 38, background: 'linear-gradient(135deg, var(--brand) 0%, var(--pink) 100%)', color: '#fff', border: 'none' }}
-                  disabled={submittingTournament}
-                >
-                  {submittingTournament ? 'Đang tạo...' : 'Tạo giải đấu'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Update Progress Modal */}
-      {showUpdateProgress && (() => {
-        const tournament = showUpdateProgress;
-        return (
-          <div
-            style={{
-              position: 'fixed', inset: 0, zIndex: 9999,
-              background: 'rgba(15, 15, 18, 0.55)',
-              backdropFilter: 'blur(4px)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              padding: 16
-            }}
-          >
-            <div
-              style={{
-                background: 'var(--surface)',
-                borderRadius: 20,
-                padding: '24px 20px',
-                width: '100%',
-                maxWidth: 400,
-                boxShadow: '0 10px 40px rgba(15,15,18,0.2)',
-                border: '1px solid var(--border)'
-              }}
-            >
-              <h4 style={{ margin: '0 0 6px', fontSize: 16, fontWeight: 800, color: 'var(--ink)' }}>✍️ Cập nhật thành tích</h4>
-              <p style={{ margin: '0 0 16px', fontSize: 12, color: 'var(--muted)', lineHeight: 1.4 }}>
-                Cập nhật thêm thành tích cho giải đấu: <strong>{tournament.title}</strong>
-              </p>
-              
-              <form onSubmit={handleUpdateProgressSubmit}>
-                <div style={{ marginBottom: 20 }}>
-                  <label className="mushy-label">Nhập giá trị cộng thêm ({tournament.target_metric})</label>
-                  <input
-                    type="number"
-                    className="mushy-input"
-                    placeholder="Vd: 5, 10, 2..."
-                    value={progressValue}
-                    onChange={(e) => setProgressValue(e.target.value)}
-                    min="1"
-                    required
-                    autoFocus
-                  />
-                </div>
-                
-                <div style={{ display: 'flex', gap: 10 }}>
+              {/* Leaderboard Section */}
+              <section>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '0 0 10px 6px' }}>
+                  <h4 className="chip-group-title" style={{ margin: 0 }}>
+                    🏆 Bảng xếp hạng Connect
+                  </h4>
                   <button
                     type="button"
                     className="mushy-btn mushy-btn--ghost"
-                    style={{ flex: 1, minHeight: 38 }}
-                    onClick={() => setShowUpdateProgress(null)}
+                    style={{ minHeight: '26px', height: '26px', fontSize: '10.5px', padding: '0 8px', margin: 0, borderRadius: '6px' }}
+                    onClick={handleOpenSharing}
                   >
-                    Hủy bỏ
-                  </button>
-                  <button
-                    type="submit"
-                    className="mushy-btn mushy-btn--primary"
-                    style={{ flex: 1, minHeight: 38, background: 'linear-gradient(135deg, var(--brand) 0%, var(--pink) 100%)', color: '#fff', border: 'none' }}
-                    disabled={submittingProgress}
-                  >
-                    {submittingProgress ? 'Đang lưu...' : 'Lưu kết quả'}
+                    ⇆ Liên-Workspace
                   </button>
                 </div>
-              </form>
-            </div>
-          </div>
-        );
-      })()}
+                
+                <div className="mushy-card" style={{ padding: '10px 14px', borderRadius: '20px' }}>
+                  {allPoints.length === 0 ? (
+                    <p style={{ fontSize: '12px', color: 'var(--muted)', fontStyle: 'italic', margin: '10px 0' }}>Chưa có ai tích lũy điểm kết nối.</p>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      {allPoints.map((row, index) => {
+                        const isMe = row.user_id === ctx.userId;
+                        const userObj = members.find(m => m.user_id === row.user_id) || (isMe ? { full_name: 'Bạn' } : { full_name: 'Đồng nghiệp' });
+                        const isTop3 = index < 3;
+                        const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : null;
 
-          {/* TAB: COMMUNITY - PHÂN HỆ CỘNG ĐỒNG */}
-          {activeTab === 'community' && (
-            <div className="tab-pane animated-fade-in" style={{ paddingBottom: '70px' }}>
-              {/* Header */}
-              <div className="compact-tab-header" style={{ marginBottom: 16 }}>
-                <div className="radar-pulse-wrapper" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, width: 24, height: 24 }}>
-                  👥
-                </div>
-                <div className="radar-text-wrapper" style={{ flex: 1 }}>
-                  <h4 className="compact-radar-title" style={{ margin: 0, fontSize: '13.5px', fontWeight: 700 }}>Cộng đồng Connect</h4>
-                  <p className="compact-radar-sub" style={{ margin: '1px 0 0', fontSize: '11px', color: 'var(--muted)' }}>Chia sẻ hoạt động, rủ kèo đi chill & theo dõi bảng thi đấu</p>
-                </div>
-              </div>
-
-              {/* Sub tabs nav */}
-              <div className="community-sub-nav">
-                <button
-                  type="button"
-                  className={`community-sub-btn ${communityTab === 'rooms' ? 'community-sub-btn--active' : ''}`}
-                  onClick={() => {
-                    bridge.haptic('light');
-                    setCommunityTab('rooms');
-                  }}
-                >
-                  📅 Phòng hẹn
-                </button>
-                <button
-                  type="button"
-                  className={`community-sub-btn ${communityTab === 'clubs' ? 'community-sub-btn--active' : ''}`}
-                  onClick={() => {
-                    bridge.haptic('light');
-                    setCommunityTab('clubs');
-                  }}
-                >
-                  👥 CLB
-                </button>
-                <button
-                  type="button"
-                  className={`community-sub-btn ${communityTab === 'feed' ? 'community-sub-btn--active' : ''}`}
-                  onClick={() => {
-                    bridge.haptic('light');
-                    setCommunityTab('feed');
-                  }}
-                >
-                  📰 Bảng tin
-                </button>
-                <button
-                  type="button"
-                  className={`community-sub-btn ${communityTab === 'tournaments' ? 'community-sub-btn--active' : ''}`}
-                  onClick={() => {
-                    bridge.haptic('light');
-                    setCommunityTab('tournaments');
-                  }}
-                >
-                  🏆 Giải đấu
-                </button>
-                <button
-                  type="button"
-                  className={`community-sub-btn ${communityTab === 'leaderboards' ? 'community-sub-btn--active' : ''}`}
-                  onClick={() => {
-                    bridge.haptic('light');
-                    setCommunityTab('leaderboards');
-                    if (!selectedTournamentId && tournaments.length > 0) {
-                      setSelectedTournamentId(tournaments[0].id);
-                    }
-                  }}
-                >
-                  📊 Xếp hạng
-                </button>
-              </div>
-
-              {/* SUB TAB: ROOMS */}
-              {communityTab === 'rooms' && (
-                <div className="animated-fade-in">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                    <h3 style={{ margin: 0, fontSize: 15, fontWeight: 800 }}>📅 Phòng Hẹn Trong Workspace</h3>
-                    <button
-                      className="mushy-btn mushy-btn--primary"
-                      style={{ padding: '6px 12px', fontSize: '11.5px', borderRadius: 999, margin: 0 }}
-                      onClick={() => {
-                        bridge.haptic('light');
-                        setNewRoom(prev => ({ ...prev, is_club: false }));
-                        setShowCreateRoom(true);
-                      }}
-                    >
-                      + Lập Kèo Hẹn
-                    </button>
-                  </div>
-
-                  {/* Create Room Form Card */}
-                  {showCreateRoom && (
-                    <section className="mushy-card premium-glow-card form-slide-down" style={{ marginBottom: 16, padding: '16px 20px' }}>
-                      <form onSubmit={handleCreateRoomSubmit}>
-                        <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
-                          <div style={{ flex: 1 }}>
-                            <label className="mushy-label" style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginLeft: '6px', marginBottom: '5px', minHeight: '28px' }}>Danh mục chính</label>
-                            <Select
-                              value={selectedParentCode}
-                              onChange={handleParentChange}
-                              options={TAXONOMY.map(p => ({ value: p.parent_code, label: p.parent_name }))}
-                            />
-                          </div>
-                          <div style={{ flex: 1 }}>
-                            <label className="mushy-label" style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginLeft: '6px', marginBottom: '5px', minHeight: '28px' }}>Bộ môn / Sở thích cụ thể</label>
-                            <Select
-                              value={newRoom.child_code}
-                              onChange={(val) => setNewRoom(prev => ({ ...prev, child_code: val }))}
-                              options={availableChildOptions}
-                            />
-                          </div>
-                        </div>
-
-                        {/* Activity Type Switcher */}
-                        <div style={{ marginBottom: 12 }}>
-                          <label className="mushy-label" style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginLeft: '6px', marginBottom: '5px', display: 'block' }}>
-                            Hình thức hoạt động
-                          </label>
-                          <div style={{ display: 'flex', gap: 10 }}>
-                            <button
-                              type="button"
-                              className={`mushy-btn ${!newRoom.is_club ? 'mushy-btn--primary' : 'mushy-btn--ghost'}`}
-                              style={{ flex: 1, minHeight: 38, fontSize: 12.5, margin: 0 }}
-                              onClick={() => setNewRoom(prev => ({ ...prev, is_club: false }))}
-                            >
-                              📅 Kèo Phòng Hẹn (1 Lần)
-                            </button>
-                            <button
-                              type="button"
-                              className={`mushy-btn ${newRoom.is_club ? 'mushy-btn--primary' : 'mushy-btn--ghost'}`}
-                              style={{ flex: 1, minHeight: 38, fontSize: 12.5, margin: 0 }}
-                              onClick={() => setNewRoom(prev => ({ ...prev, is_club: true }))}
-                            >
-                              👥 Câu Lạc Bộ (Lâu Dài)
-                            </button>
-                          </div>
-                        </div>
-
-                        {newRoom.is_club ? (
-                          <>
-                            <div style={{ marginBottom: 12 }}>
-                              <label className="mushy-label" style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginLeft: '6px', marginBottom: '5px', display: 'block' }}>Tên Câu Lạc Bộ</label>
-                              <input
-                                type="text"
-                                className="mushy-input"
-                                placeholder="Vd: CLB Chạy bộ Sáng sớm Landmark..."
-                                value={newRoom.club_name || ''}
-                                onChange={(e) => setNewRoom(prev => ({ ...prev, club_name: e.target.value }))}
-                                style={{ borderRadius: '14px', border: '1.5px solid var(--hairline)', padding: '10px 14px', fontSize: '13.5px', minHeight: '44px', width: '100%', outline: 'none' }}
-                                required
-                              />
-                            </div>
-                            <div style={{ marginBottom: 12 }}>
-                              <label className="mushy-label" style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginLeft: '6px', marginBottom: '5px', display: 'block' }}>Mô tả Câu Lạc Bộ</label>
-                              <textarea
-                                className="mushy-input"
-                                placeholder="Vd: Nơi giao lưu chạy bộ, chia sẻ sở thích thể thao mỗi cuối tuần..."
-                                value={newRoom.club_description || ''}
-                                onChange={(e) => setNewRoom(prev => ({ ...prev, club_description: e.target.value }))}
-                                style={{ borderRadius: '14px', border: '1.5px solid var(--hairline)', padding: '10px 14px', fontSize: '13.5px', minHeight: '80px', width: '100%', outline: 'none', resize: 'vertical' }}
-                                required
-                              />
-                            </div>
-                            <div style={{ marginBottom: 12 }}>
-                              <label className="mushy-label" style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginLeft: '6px', marginBottom: '5px', display: 'block' }}>Khu vực / Địa bàn hoạt động</label>
-                              <input
-                                type="text"
-                                className="mushy-input"
-                                placeholder="Vd: Công viên Landmark 81, Sân bóng Bình Thạnh..."
-                                value={newRoom.location || ''}
-                                onChange={(e) => setNewRoom(prev => ({ ...prev, location: e.target.value }))}
-                                style={{ borderRadius: '14px', border: '1.5px solid var(--hairline)', padding: '10px 14px', fontSize: '13.5px', minHeight: '44px', width: '100%', outline: 'none' }}
-                                required
-                              />
-                            </div>
-                          </>
-                        ) : (
-                          <>
-                            <div style={{ marginBottom: 12 }}>
-                              <label className="mushy-label" style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginLeft: '6px', marginBottom: '5px', minHeight: '28px' }}>Vị trí / Địa điểm hẹn</label>
-                              <input
-                                type="text"
-                                className="mushy-input"
-                                placeholder="Vd: Sân cầu lông Thượng Đình, 345 Nguyễn Trãi..."
-                                value={newRoom.location || ''}
-                                onChange={(e) => setNewRoom(prev => ({ ...prev, location: e.target.value }))}
-                                style={{ borderRadius: '14px', border: '1.5px solid var(--hairline)', padding: '10px 14px', fontSize: '13.5px', minHeight: '44px', width: '100%', outline: 'none' }}
-                                required
-                              />
-                            </div>
-
-                            <div style={{ marginBottom: 12 }}>
-                              <label className="mushy-label" style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginLeft: '6px', marginBottom: '5px', minHeight: '28px' }}>Thời gian hẹn tổ chức</label>
-                              <input
-                                type="datetime-local"
-                                className="mushy-input"
-                                style={{ borderRadius: '14px', border: '1.5px solid var(--hairline)', padding: '10px 14px', fontSize: '13.5px', minHeight: '44px', width: '100%', outline: 'none' }}
-                                value={newRoom.scheduled_at || ''}
-                                onChange={(e) => setNewRoom(prev => ({ ...prev, scheduled_at: e.target.value }))}
-                                required
-                              />
-                              <div style={{ display: 'flex', gap: 6, overflowX: 'auto', padding: '4px 2px', marginTop: 6, scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                                <button type="button" onClick={() => setQuickTime('today_19')} style={{ flexShrink: 0, fontSize: 11, padding: '6px 12px', background: 'rgba(15,15,18,0.03)', border: '1px solid var(--hairline)', borderRadius: 10, color: 'var(--muted)', cursor: 'pointer', transition: 'all 0.2s' }}>Tối nay 19h</button>
-                                <button type="button" onClick={() => setQuickTime('today_20')} style={{ flexShrink: 0, fontSize: 11, padding: '6px 12px', background: 'rgba(15,15,18,0.03)', border: '1px solid var(--hairline)', borderRadius: 10, color: 'var(--muted)', cursor: 'pointer', transition: 'all 0.2s' }}>Tối nay 20h</button>
-                                <button type="button" onClick={() => setQuickTime('tomorrow_8')} style={{ flexShrink: 0, fontSize: 11, padding: '6px 12px', background: 'rgba(15,15,18,0.03)', border: '1px solid var(--hairline)', borderRadius: 10, color: 'var(--muted)', cursor: 'pointer', transition: 'all 0.2s' }}>Sáng mai 8h</button>
-                                <button type="button" onClick={() => setQuickTime('tomorrow_17')} style={{ flexShrink: 0, fontSize: 11, padding: '6px 12px', background: 'rgba(15,15,18,0.03)', border: '1px solid var(--hairline)', borderRadius: 10, color: 'var(--muted)', cursor: 'pointer', transition: 'all 0.2s' }}>Chiều mai 17h</button>
-                                <button type="button" onClick={() => setQuickTime('weekend_9')} style={{ flexShrink: 0, fontSize: 11, padding: '6px 12px', background: 'rgba(15,15,18,0.03)', border: '1px solid var(--hairline)', borderRadius: 10, color: 'var(--muted)', cursor: 'pointer', transition: 'all 0.2s' }}>T7/CN 9h sáng</button>
-                              </div>
-                            </div>
-
-                            <div style={{ marginBottom: 12 }}>
-                              <label className="mushy-label" style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginLeft: '6px', marginBottom: '5px', minHeight: '28px' }}>Sĩ số tối đa</label>
-                              <input
-                                type="number"
-                                className="mushy-input"
-                                min="2"
-                                style={{ borderRadius: '14px', border: '1.5px solid var(--hairline)', padding: '10px 14px', fontSize: '13.5px', minHeight: '44px', width: '100%', outline: 'none' }}
-                                value={newRoom.max_participants || 2}
-                                onChange={(e) => {
-                                  const val = e.target.value;
-                                  setNewRoom(prev => ({ ...prev, max_participants: val === '' ? '' : (parseInt(val) || '') }));
-                                }}
-                                required
-                              />
-                            </div>
-
-                            {/* Quota multiplier stepper */}
-                            <div style={{ marginBottom: 12 }}>
-                              <label className="mushy-label" style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginLeft: '6px', marginBottom: '5px', minHeight: '28px' }}>Hạn ngạch lời mời chờ tối đa</label>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', background: 'rgba(15,15,18,0.02)', border: '1.5px solid var(--hairline)', borderRadius: 14, minHeight: 44 }}>
-                                <button type="button" onClick={() => setQuotaMultiplier(v => Math.max(1, v - 1))} style={{ width: 30, height: 30, borderRadius: '50%', border: '1.5px solid var(--hairline)', background: '#fff', fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>−</button>
-                                <div style={{ flex: 1, textAlign: 'center' }}>
-                                  <span style={{ fontSize: 18, fontWeight: 800, color: 'var(--brand)' }}>{createRoomAllowedLimit}</span>
-                                  <span style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 4 }}>lời mời</span>
-                                  <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 1 }}>{parseInt(newRoom.max_participants)||2} người × {quotaMultiplier} lần/slot = {createRoomAllowedLimit}</div>
-                                </div>
-                                <button type="button" onClick={() => setQuotaMultiplier(v => Math.min(10, v + 1))} style={{ width: 30, height: 30, borderRadius: '50%', border: '1.5px solid var(--hairline)', background: '#fff', fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>+</button>
-                              </div>
-                            </div>
-                          </>
-                        )}
-
-                        <div style={{ marginBottom: 16 }}>
-                          <label className="mushy-label" style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 6, marginLeft: '6px', marginBottom: 10 }}>
-                            <span style={{ color: 'var(--brand)' }}>⚠️</span> {newRoom.is_club ? 'Mời thành viên sáng lập (Tùy chọn)' : 'Gửi lời mời đầu tiên (Chọn ít nhất 1 người)'}
-                          </label>
-                          {members.length > 0 && (
-                            <button
-                              type="button"
-                              className="mushy-btn mushy-btn--ghost"
-                              onClick={() => handleSelectRandomGuests('any', Math.max(0, createRoomAllowedLimit - invitedGuests.length))}
-                              style={{ width: '100%', minHeight: 36, fontSize: 12, marginBottom: 12, borderRadius: 10, color: 'var(--muted)', borderColor: 'var(--hairline)' }}
-                            >
-                              🎲 Ghép ngẫu nhiên lấp đầy hạn ngạch (tối đa {Math.max(0, createRoomAllowedLimit - invitedGuests.length)} người)
-                            </button>
-                          )}
-
-                          {/* ── Suggestion rows ── */}
-                          {(() => {
-                            // Build acquaintances list from interaction history, filtered by selected tag
-                            const acquaintanceMembers = members.filter(m => {
-                              if (m.user_id === ctx.userId) return false;
-                              return interactionHistory.some(h =>
-                                (h.user_id_1 === ctx.userId && h.user_id_2 === m.user_id) ||
-                                (h.user_id_1 === m.user_id && h.user_id_2 === ctx.userId)
-                              );
-                            }).slice(0, 8);
-
-                            const renderChipRow = (list, label, emoji) => {
-                              if (list.length === 0) return null;
-                              return (
-                                <div style={{ marginBottom: 14 }}>
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, paddingLeft: 4 }}>
-                                    <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)' }}>
-                                      {emoji} {label} ({list.length})
-                                    </span>
-                                    <button
-                                      type="button"
-                                      style={{ background: 'none', border: 'none', color: 'var(--brand)', fontSize: 11, fontWeight: 'bold', cursor: 'pointer', padding: 0 }}
-                                      onClick={() => {
-                                        bridge.haptic('light');
-                                        const toAdd = list.map(m => m.user_id).filter(id => !invitedGuests.includes(id));
-                                        const available = createRoomAllowedLimit - invitedGuests.length;
-                                        if (available <= 0) { dialog.error('Hạn ngạch đầy!', `Chỉ có thể mời tối đa ${createRoomAllowedLimit} người.`); return; }
-                                        setInvitedGuests(prev => [...prev, ...toAdd.slice(0, available)]);
-                                      }}
-                                    >
-                                      ✨ Chọn tất cả
-                                    </button>
-                                  </div>
-                                  <div style={{ display: 'flex', gap: 12, overflowX: 'auto', padding: '4px 2px 8px', scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                                    {list.map(m => {
-                                      const isSelected = invitedGuests.includes(m.user_id);
-                                      const profile = allProfiles[m.user_id];
-                                      let _pt = null;
-                                      const startPress = () => { _pt = setTimeout(() => { bridge.haptic('tooltip_vibe'); setAvatarTooltip({ member: m, profile }); _pt = null; }, 500); };
-                                      const cancelPress = () => { if (_pt) { clearTimeout(_pt); _pt = null; } };
-                                      return (
-                                        <div
-                                          key={m.user_id}
-                                          onMouseDown={startPress} onMouseUp={cancelPress} onMouseLeave={cancelPress}
-                                          onTouchStart={startPress} onTouchEnd={cancelPress} onTouchCancel={cancelPress}
-                                          onClick={() => {
-                                            cancelPress();
-                                            if (avatarTooltip) return;
-                                            bridge.haptic('light');
-                                            if (isSelected) {
-                                              setInvitedGuests(prev => prev.filter(id => id !== m.user_id));
-                                            } else {
-                                              if (invitedGuests.length >= createRoomAllowedLimit) {
-                                                dialog.error('Hạn ngạch đầy!', `Chỉ có thể mời tối đa ${createRoomAllowedLimit} người.`);
-                                                return;
-                                              }
-                                              setInvitedGuests(prev => [...prev, m.user_id]);
-                                            }
-                                          }}
-                                          style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, minWidth: 64, cursor: 'pointer', position: 'relative', userSelect: 'none' }}
-                                        >
-                                          <div style={{
-                                            width: 46, height: 46, borderRadius: '50%',
-                                            background: isSelected ? 'linear-gradient(135deg, var(--brand) 0%, var(--pink) 100%)' : getAvatarGradient(m.full_name?.charAt(0)),
-                                            border: isSelected ? '2.5px solid var(--brand)' : '1.5px solid rgba(255,255,255,0.4)',
-                                            boxShadow: isSelected ? '0 0 10px rgba(230,57,70,0.35)' : '0 3px 8px rgba(15,15,18,0.06)',
-                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                            fontSize: 15, fontWeight: 700, color: '#fff',
-                                            transition: 'all 180ms ease', position: 'relative'
-                                          }}>
-                                            <span>{m.full_name?.charAt(0)}</span>
-                                            {isSelected && (
-                                              <div style={{ position: 'absolute', bottom: -2, right: -2, width: 16, height: 16, borderRadius: '50%', background: '#4CAF50', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 'bold', border: '1.5px solid #fff' }}>✓</div>
-                                            )}
-                                          </div>
-                                          <span style={{ fontSize: 10, fontWeight: isSelected ? 700 : 500, color: isSelected ? 'var(--brand)' : 'var(--ink)', textAlign: 'center', maxWidth: 64, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                            {m.full_name}
-                                          </span>
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-                              );
-                            };
-
-                            return (
-                              <>
-                                {renderChipRow(acquaintanceMembers, 'Đã từng kết nối', '🤝')}
-                                {renderChipRow(matchingTagMembers, 'Trùng sở thích', '🔥')}
-                              </>
-                            );
-                          })()}
-                          
-                          {/* Thống kê hạn ngạch */}
-                          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 11, color: 'var(--muted)' }}>
-                            <span>Đã chọn: <strong>{invitedGuests.length}</strong> người</span>
-                            {!newRoom.is_club && (
-                              <span className={invitedGuests.length > createRoomAllowedLimit ? 'quota-indicator--warning' : ''}>
-                                Hạn ngạch pending tối đa: <strong>{createRoomAllowedLimit}</strong> người
+                        return (
+                          <div key={row.user_id} style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '10px 6px',
+                            borderBottom: index < allPoints.length - 1 ? '1px solid var(--hairline)' : 'none',
+                            background: isMe ? 'rgba(230, 57, 70, 0.04)' : 'transparent',
+                            borderRadius: isMe ? '10px' : '0'
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1 }}>
+                              <span style={{
+                                width: '22px',
+                                textAlign: 'center',
+                                fontWeight: '800',
+                                fontSize: isTop3 ? '16px' : '12px',
+                                color: isTop3 ? 'var(--brand)' : 'var(--muted)',
+                                flexShrink: 0
+                              }}>
+                                {medal || (index + 1)}
                               </span>
-                            )}
-                          </div>
-                          {!newRoom.is_club && invitedGuests.length > createRoomAllowedLimit && (
-                            <div style={{ marginTop: 6, fontSize: 11, color: 'var(--danger)', fontWeight: 600 }}>
-                              ⚠️ Số người được mời vượt hạn ngạch tối đa. Vui lòng bỏ chọn bớt hoặc nâng sĩ số phòng!
+                              <div style={{
+                                width: '28px',
+                                height: '28px',
+                                borderRadius: '50%',
+                                background: getAvatarGradient(userObj.full_name?.charAt(0)),
+                                color: '#fff',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: '11px',
+                                fontWeight: 'bold',
+                                flexShrink: 0
+                              }}>
+                                {userObj.full_name?.charAt(0)}
+                              </div>
+                              <div style={{ minWidth: 0, flex: 1, textAlign: 'left' }}>
+                                <span style={{
+                                  fontSize: '13px',
+                                  fontWeight: isMe ? '800' : '600',
+                                  color: isMe ? 'var(--brand)' : 'var(--ink)',
+                                  display: 'block',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap'
+                                }}>
+                                  {userObj.full_name} {isMe ? '(Tôi)' : ''}
+                                </span>
+                                {row.helper_badge_level && (
+                                  <span style={{
+                                    fontSize: '9px',
+                                    fontWeight: '700',
+                                    padding: '1px 5px',
+                                    background: row.helper_badge_level === 'gold' ? '#FEF08A' : row.helper_badge_level === 'silver' ? '#F1F5F9' : '#FFEDD5',
+                                    color: row.helper_badge_level === 'gold' ? '#854D0E' : row.helper_badge_level === 'silver' ? '#475569' : '#C2410C',
+                                    borderRadius: '4px',
+                                    textTransform: 'uppercase'
+                                  }}>
+                                    {row.helper_badge_level}
+                                  </span>
+                                )}
+                              </div>
                             </div>
-                          )}
-                        </div>
-
-                        <button
-                          type="submit"
-                          className="mushy-btn mushy-btn--primary mushy-btn--block"
-                          style={{ margin: 0 }}
-                          disabled={submittingRoom || (!newRoom.is_club && invitedGuests.length === 0) || (!newRoom.is_club && invitedGuests.length > createRoomAllowedLimit)}
-                        >
-                          {submittingRoom ? <span className="mushy-spinner" /> : newRoom.is_club ? 'Thành lập câu lạc bộ 👥' : 'Xác nhận tạo phòng & Gửi lời mời 🚀'}
-                        </button>
-                      </form>
-                    </section>
-                  )}
-
-                  {/* My Rooms section */}
-                  <h4 style={{ fontSize: 13, color: 'var(--brand)', marginBottom: 8, marginTop: 16 }}>🏠 Kèo Của Bạn</h4>
-                  {(() => {
-                    const userRooms = rooms.filter(room => {
-                      if (room.is_club) return false;
-                      if (hiddenRoomIds.includes(room.id)) return false;
-                      const isHost = room.host_id === ctx.userId;
-                      const hasJoined = invitations.some(i => i.room_id === room.id && i.receiver_id === ctx.userId && i.status === 'accepted');
-                      return isHost || hasJoined;
-                    });
-
-                    if (userRooms.length === 0) {
-                      return (
-                        <div style={{ textAlign: 'center', padding: '16px', color: 'var(--muted)', background: 'rgba(15,15,18,0.02)', borderRadius: 12, border: '1px dashed var(--hairline)', fontSize: 12, marginBottom: 16 }}>
-                          Bạn chưa lập hoặc tham gia phòng hẹn nào. Hãy lập kèo mới hoặc xin tham gia bên dưới nhé!
-                        </div>
-                      );
-                    }
-
-                    // Sắp xếp phòng
-                    const sortedRooms = [...userRooms].sort((a, b) => new Date(b.created_at || b.scheduled_at).getTime() - new Date(a.created_at || a.scheduled_at).getTime());
-
-                    return sortedRooms.map(room => renderRoomCardExtended(room, true));
-                  })()}
-
-                  {/* Explore Rooms section */}
-                  <h4 style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 8, marginTop: 16 }}>🌍 Kèo Công Khai Chờ Thành Viên</h4>
-                  {(() => {
-                    const publicRooms = rooms.filter(room => {
-                      if (room.is_club) return false;
-                      if (room.host_id === ctx.userId) return false;
-                      if (room.status === 'cancelled' || room.status === 'expired' || room.status === 'matched') return false;
-                      const hasJoined = invitations.some(i => i.room_id === room.id && i.receiver_id === ctx.userId && (i.status === 'accepted' || i.status === 'pending'));
-                      return !hasJoined;
-                    });
-
-                    if (publicRooms.length === 0) {
-                      return (
-                        <div style={{ textAlign: 'center', padding: '16px', color: 'var(--muted)', background: 'rgba(15,15,18,0.02)', borderRadius: 12, border: '1px dashed var(--hairline)', fontSize: 12 }}>
-                          Không có phòng hẹn công khai nào khác đang mở.
-                        </div>
-                      );
-                    }
-
-                    return publicRooms.map(room => renderRoomCardExtended(room, false));
-                  })()}
-                </div>
-              )}
-
-              {/* SUB TAB: CLUBS */}
-              {communityTab === 'clubs' && (
-                <div className="animated-fade-in">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                    <h3 style={{ margin: 0, fontSize: 15, fontWeight: 800 }}>👥 Câu Lạc Bộ Trong Workspace</h3>
-                    <button
-                      className="mushy-btn mushy-btn--primary"
-                      style={{ padding: '6px 12px', fontSize: '11.5px', borderRadius: 999, margin: 0 }}
-                      onClick={() => {
-                        bridge.haptic('light');
-                        setNewRoom(prev => ({ ...prev, is_club: true }));
-                        setShowCreateRoom(true);
-                      }}
-                    >
-                      + Thành lập CLB
-                    </button>
-                  </div>
-
-                  {/* Create Room Form Card (for CLB creation) */}
-                  {showCreateRoom && (
-                    <section className="mushy-card premium-glow-card form-slide-down" style={{ marginBottom: 16, padding: '16px 20px' }}>
-                      <form onSubmit={handleCreateRoomSubmit}>
-                        <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
-                          <div style={{ flex: 1 }}>
-                            <label className="mushy-label" style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginLeft: '6px', marginBottom: '5px', minHeight: '28px' }}>Danh mục chính</label>
-                            <Select
-                              value={selectedParentCode}
-                              onChange={handleParentChange}
-                              options={TAXONOMY.map(p => ({ value: p.parent_code, label: p.parent_name }))}
-                            />
+                            <div style={{ textAlign: 'right', flexShrink: 0, fontWeight: '800', fontSize: '13px', color: 'var(--ink)' }}>
+                              {row.points} <span style={{ fontSize: '10px', color: 'var(--muted)', fontWeight: 'normal' }}>đối tác</span>
+                            </div>
                           </div>
-                          <div style={{ flex: 1 }}>
-                            <label className="mushy-label" style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginLeft: '6px', marginBottom: '5px', minHeight: '28px' }}>Bộ môn / Sở thích cụ thể</label>
-                            <Select
-                              value={newRoom.child_code}
-                              onChange={(val) => setNewRoom(prev => ({ ...prev, child_code: val }))}
-                              options={availableChildOptions}
-                            />
-                          </div>
-                        </div>
-
-                        {/* Activity Type Switcher */}
-                        <div style={{ marginBottom: 12 }}>
-                          <label className="mushy-label" style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginLeft: '6px', marginBottom: '5px', display: 'block' }}>
-                            Hình thức hoạt động
-                          </label>
-                          <div style={{ display: 'flex', gap: 10 }}>
-                            <button
-                              type="button"
-                              className={`mushy-btn ${!newRoom.is_club ? 'mushy-btn--primary' : 'mushy-btn--ghost'}`}
-                              style={{ flex: 1, minHeight: 38, fontSize: 12.5, margin: 0 }}
-                              onClick={() => setNewRoom(prev => ({ ...prev, is_club: false }))}
-                            >
-                              📅 Kèo Phòng Hẹn (1 Lần)
-                            </button>
-                            <button
-                              type="button"
-                              className={`mushy-btn ${newRoom.is_club ? 'mushy-btn--primary' : 'mushy-btn--ghost'}`}
-                              style={{ flex: 1, minHeight: 38, fontSize: 12.5, margin: 0 }}
-                              onClick={() => setNewRoom(prev => ({ ...prev, is_club: true }))}
-                            >
-                              👥 Câu Lạc Bộ (Lâu Dài)
-                            </button>
-                          </div>
-                        </div>
-
-                        <div style={{ marginBottom: 12 }}>
-                          <label className="mushy-label" style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginLeft: '6px', marginBottom: '5px', display: 'block' }}>Tên Câu Lạc Bộ</label>
-                          <input
-                            type="text"
-                            className="mushy-input"
-                            placeholder="Vd: CLB Chạy bộ Sáng sớm Landmark..."
-                            value={newRoom.club_name || ''}
-                            onChange={(e) => setNewRoom(prev => ({ ...prev, club_name: e.target.value }))}
-                            style={{ borderRadius: '14px', border: '1.5px solid var(--hairline)', padding: '10px 14px', fontSize: '13.5px', minHeight: '44px', width: '100%', outline: 'none' }}
-                            required
-                          />
-                        </div>
-                        <div style={{ marginBottom: 12 }}>
-                          <label className="mushy-label" style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginLeft: '6px', marginBottom: '5px', display: 'block' }}>Mô tả Câu Lạc Bộ</label>
-                          <textarea
-                            className="mushy-input"
-                            placeholder="Vd: Nơi giao lưu chạy bộ, chia sẻ sở thích thể thao mỗi cuối tuần..."
-                            value={newRoom.club_description || ''}
-                            onChange={(e) => setNewRoom(prev => ({ ...prev, club_description: e.target.value }))}
-                            style={{ borderRadius: '14px', border: '1.5px solid var(--hairline)', padding: '10px 14px', fontSize: '13.5px', minHeight: '80px', width: '100%', outline: 'none', resize: 'vertical' }}
-                            required
-                          />
-                        </div>
-                        <div style={{ marginBottom: 12 }}>
-                          <label className="mushy-label" style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginLeft: '6px', marginBottom: '5px', display: 'block' }}>Khu vực / Địa bàn hoạt động</label>
-                          <input
-                            type="text"
-                            className="mushy-input"
-                            placeholder="Vd: Công viên Landmark 81, Sân bóng Bình Thạnh..."
-                            value={newRoom.location || ''}
-                            onChange={(e) => setNewRoom(prev => ({ ...prev, location: e.target.value }))}
-                            style={{ borderRadius: '14px', border: '1.5px solid var(--hairline)', padding: '10px 14px', fontSize: '13.5px', minHeight: '44px', width: '100%', outline: 'none' }}
-                            required
-                          />
-                        </div>
-
-                        <div style={{ marginBottom: 16 }}>
-                          <label className="mushy-label" style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 6, marginLeft: '6px', marginBottom: 10 }}>
-                            Mời thành viên sáng lập (Tùy chọn)
-                          </label>
-                          {members.length > 0 && (
-                            <button
-                              type="button"
-                              className="mushy-btn mushy-btn--ghost"
-                              onClick={() => handleSelectRandomGuests('any', Math.max(0, createRoomAllowedLimit - invitedGuests.length))}
-                              style={{ width: '100%', minHeight: 36, fontSize: 12, marginBottom: 12, borderRadius: 10, color: 'var(--muted)', borderColor: 'var(--hairline)' }}
-                            >
-                              🎲 Ghép ngẫu nhiên lấp đầy hạn ngạch
-                            </button>
-                          )}
-
-                          {/* ── Suggestion rows ── */}
-                          {(() => {
-                            const acquaintanceMembers = members.filter(m => {
-                              if (m.user_id === ctx.userId) return false;
-                              return interactionHistory.some(h =>
-                                (h.user_id_1 === ctx.userId && h.user_id_2 === m.user_id) ||
-                                (h.user_id_1 === m.user_id && h.user_id_2 === ctx.userId)
-                              );
-                            }).slice(0, 8);
-
-                            const renderChipRow = (list, label, emoji) => {
-                              if (list.length === 0) return null;
-                              return (
-                                <div style={{ marginBottom: 14 }}>
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, paddingLeft: 4 }}>
-                                    <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)' }}>
-                                      {emoji} {label} ({list.length})
-                                    </span>
-                                    <button
-                                      type="button"
-                                      style={{ background: 'none', border: 'none', color: 'var(--brand)', fontSize: 11, fontWeight: 'bold', cursor: 'pointer', padding: 0 }}
-                                      onClick={() => {
-                                        bridge.haptic('light');
-                                        const toAdd = list.map(m => m.user_id).filter(id => !invitedGuests.includes(id));
-                                        const available = createRoomAllowedLimit - invitedGuests.length;
-                                        if (available <= 0) return;
-                                        setInvitedGuests(prev => [...prev, ...toAdd.slice(0, available)]);
-                                      }}
-                                    >
-                                      ✨ Chọn tất cả
-                                    </button>
-                                  </div>
-                                  <div style={{ display: 'flex', gap: 12, overflowX: 'auto', padding: '4px 2px 8px', scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                                    {list.map(m => {
-                                      const isSelected = invitedGuests.includes(m.user_id);
-                                      const profile = allProfiles[m.user_id];
-                                      let _pt = null;
-                                      const startPress = () => { _pt = setTimeout(() => { bridge.haptic('tooltip_vibe'); setAvatarTooltip({ member: m, profile }); _pt = null; }, 500); };
-                                      const cancelPress = () => { if (_pt) { clearTimeout(_pt); _pt = null; } };
-                                      return (
-                                        <div
-                                          key={m.user_id}
-                                          onMouseDown={startPress} onMouseUp={cancelPress} onMouseLeave={cancelPress}
-                                          onTouchStart={startPress} onTouchEnd={cancelPress} onTouchCancel={cancelPress}
-                                          onClick={() => {
-                                            cancelPress();
-                                            if (avatarTooltip) return;
-                                            bridge.haptic('light');
-                                            if (isSelected) {
-                                              setInvitedGuests(prev => prev.filter(id => id !== m.user_id));
-                                            } else {
-                                              setInvitedGuests(prev => [...prev, m.user_id]);
-                                            }
-                                          }}
-                                          style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, minWidth: 64, cursor: 'pointer', position: 'relative', userSelect: 'none' }}
-                                        >
-                                          <div style={{
-                                            width: 46, height: 46, borderRadius: '50%',
-                                            background: isSelected ? 'linear-gradient(135deg, var(--brand) 0%, var(--pink) 100%)' : getAvatarGradient(m.full_name?.charAt(0)),
-                                            border: isSelected ? '2.5px solid var(--brand)' : '1.5px solid rgba(255,255,255,0.4)',
-                                            boxShadow: isSelected ? '0 0 10px rgba(230,57,70,0.35)' : '0 3px 8px rgba(15,15,18,0.06)',
-                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                            fontSize: 15, fontWeight: 700, color: '#fff',
-                                            transition: 'all 180ms ease', position: 'relative'
-                                          }}>
-                                            <span>{m.full_name?.charAt(0)}</span>
-                                            {isSelected && (
-                                              <div style={{ position: 'absolute', bottom: -2, right: -2, width: 16, height: 16, borderRadius: '50%', background: '#4CAF50', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 'bold', border: '1.5px solid #fff' }}>✓</div>
-                                            )}
-                                          </div>
-                                          <span style={{ fontSize: 10, fontWeight: isSelected ? 700 : 500, color: isSelected ? 'var(--brand)' : 'var(--ink)', textAlign: 'center', maxWidth: 64, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                            {m.full_name}
-                                          </span>
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-                              );
-                            };
-
-                            return (
-                              <>
-                                {renderChipRow(acquaintanceMembers, 'Đã từng kết nối', '🤝')}
-                                {renderChipRow(matchingTagMembers, 'Trùng sở thích', '🔥')}
-                              </>
-                            );
-                          })()}
-                        </div>
-
-                        <button
-                          type="submit"
-                          className="mushy-btn mushy-btn--primary mushy-btn--block"
-                          style={{ margin: 0 }}
-                          disabled={submittingRoom}
-                        >
-                          {submittingRoom ? <span className="mushy-spinner" /> : 'Thành lập câu lạc bộ 👥'}
-                        </button>
-                      </form>
-                    </section>
-                  )}
-
-                  {/* My Clubs section */}
-                  <h4 style={{ fontSize: 13, color: 'var(--brand)', marginBottom: 8, marginTop: 16 }}>🏠 CLB Của Bạn</h4>
-                  {(() => {
-                    const myClubs = rooms.filter(room => {
-                      if (!room.is_club) return false;
-                      const isHost = room.host_id === ctx.userId;
-                      const hasJoined = invitations.some(i => i.room_id === room.id && i.receiver_id === ctx.userId && i.status === 'accepted');
-                      return isHost || hasJoined;
-                    });
-
-                    if (myClubs.length === 0) {
-                      return (
-                        <div style={{ textAlign: 'center', padding: '16px', color: 'var(--muted)', background: 'rgba(15,15,18,0.02)', borderRadius: 12, border: '1px dashed var(--hairline)', fontSize: 12, marginBottom: 16 }}>
-                          Bạn chưa gia nhập câu lạc bộ nào. Hãy tham gia các câu lạc bộ bên dưới nhé!
-                        </div>
-                      );
-                    }
-
-                    return myClubs.map(club => renderClubCard(club, true));
-                  })()}
-
-                  {/* Explore Clubs section */}
-                  <h4 style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 8, marginTop: 16 }}>🌍 Khám Phá Câu Lạc Bộ Khác</h4>
-                  {(() => {
-                    const publicClubs = rooms.filter(room => {
-                      if (!room.is_club) return false;
-                      if (room.host_id === ctx.userId) return false;
-                      const hasJoined = invitations.some(i => i.room_id === room.id && i.receiver_id === ctx.userId && i.status === 'accepted');
-                      return !hasJoined;
-                    });
-
-                    if (publicClubs.length === 0) {
-                      return (
-                        <div style={{ textAlign: 'center', padding: '16px', color: 'var(--muted)', background: 'rgba(15,15,18,0.02)', borderRadius: 12, border: '1px dashed var(--hairline)', fontSize: 12 }}>
-                          Không có câu lạc bộ nào khác để khám phá.
-                        </div>
-                      );
-                    }
-
-                    return publicClubs.map(club => renderClubCard(club, false));
-                  })()}
-                </div>
-              )}
-
-              {/* SUB TAB 1: FEED */}
-              {communityTab === 'feed' && (
-                <div className="animated-fade-in">
-                  {/* Write post card */}
-                  <section className="mushy-card" style={{ padding: 14, marginBottom: 16 }}>
-                    <form onSubmit={handleCreatePostSubmit}>
-                      <textarea
-                        className="mushy-input"
-                        placeholder="Hôm nay bạn thế nào? Rủ đồng nghiệp đi chill hay thể thao nhé..."
-                        value={newPostContent}
-                        onChange={(e) => setNewPostContent(e.target.value)}
-                        style={{ width: '100%', minHeight: 70, border: '1.5px solid var(--border)', borderRadius: 12, padding: '10px 12px', fontSize: 13, outline: 'none', resize: 'none' }}
-                        maxLength={2000}
-                        required
-                      />
-                      
-                      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 10, flexWrap: 'wrap' }}>
-                        {/* Attach room selector */}
-                        <div style={{ flex: 1, minWidth: 150 }}>
-                          <Select
-                            value={newPostRoomId}
-                            onChange={(val) => setNewPostRoomId(val)}
-                            options={[
-                              { value: '', label: '🔗 Không đính kèm kèo' },
-                              ...rooms.filter(r => r.host_id === ctx.userId && (r.status === 'open' || r.status === 'filling' || r.is_club)).map(r => ({
-                                value: r.id,
-                                label: r.is_club ? `👥 CLB: ${r.club_name}` : `📅 Phòng: ${r.location}`
-                              }))
-                            ]}
-                          />
-                        </div>
-                        <button
-                          type="submit"
-                          className="mushy-btn mushy-btn--primary"
-                          style={{ minHeight: 36, padding: '0 18px', background: 'linear-gradient(135deg, var(--brand) 0%, var(--pink) 100%)', color: '#fff', fontWeight: 700, borderRadius: 10, border: 'none' }}
-                          disabled={submittingPost}
-                        >
-                          {submittingPost ? 'Đang đăng...' : 'Đăng bài'}
-                        </button>
-                      </div>
-                    </form>
-                  </section>
-
-                  {/* Posts list */}
-                  {posts.length === 0 ? (
-                    <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--muted)' }}>
-                      <div style={{ fontSize: 40, marginBottom: 8 }}>📰</div>
-                      <p style={{ margin: 0, fontSize: 13 }}>Chưa có bài đăng nào trong workspace này. Hãy là người đầu tiên chia sẻ!</p>
+                        );
+                      })}
                     </div>
-                  ) : (
-                    posts.map(post => {
-                      const author = members.find(m => m.user_id === post.user_id) || (post.user_id === ctx.userId ? { full_name: 'Bạn' } : { full_name: 'Đồng nghiệp' });
-                      const authorProfile = allProfiles[post.user_id] || {};
-                      const attachedRoom = post.room_id ? rooms.find(r => r.id === post.room_id) : null;
-                      const likedByMe = postLikes.some(l => l.post_id === post.id && l.user_id === ctx.userId);
-                      const likeCount = postLikes.filter(l => l.post_id === post.id).length;
-
-                      return (
-                        <div key={post.id} className="feed-post-card">
-                          <div className="post-header">
-                            <div className="post-avatar" style={{ background: getAvatarGradient(author.full_name?.charAt(0)) }}>
-                              {author.full_name?.charAt(0)}
-                            </div>
-                            <div className="post-meta">
-                              <span className="post-author">{author.full_name}</span>
-                              <span className="post-time">
-                                {authorProfile.department || 'Thành viên'} · {formatTime(post.created_at)}
-                              </span>
-                            </div>
-                          </div>
-                          
-                          <div className="post-content">{post.content}</div>
-                          
-                          {/* Attached Room Card */}
-                          {attachedRoom && (
-                            <div className="post-room-card">
-                              <div className="post-room-info">
-                                <div className="post-room-title">
-                                  {attachedRoom.is_club ? (
-                                    <>👥 CLB: {attachedRoom.club_name || getTagName(attachedRoom.child_code)}</>
-                                  ) : (
-                                    <>🏸 Rủ kèo: {getTagName(attachedRoom.child_code)}</>
-                                  )}
-                                </div>
-                                <div className="post-room-detail">
-                                  📍 Địa điểm: {attachedRoom.location} <br />
-                                  🕒 Thời gian: {attachedRoom.is_club ? 'Hoạt động lâu dài' : formatTime(attachedRoom.scheduled_at)}
-                                </div>
-                              </div>
-                              <button
-                                type="button"
-                                className="post-room-btn"
-                                onClick={() => {
-                                  bridge.haptic('light');
-                                  setActiveTab('community');
-                                  setCommunityTab(attachedRoom.is_club ? 'clubs' : 'rooms');
-                                  setHighlightedRoomId(attachedRoom.id);
-                                  setTimeout(() => {
-                                    const el = document.getElementById(`room-card-${attachedRoom.id}`);
-                                    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                  }, 200);
-                                }}
-                              >
-                                {attachedRoom.is_club ? 'Xem CLB' : 'Xem Phòng'}
-                              </button>
-                            </div>
-                          )}
-                          
-                          <div className="post-footer">
-                            <button
-                              type="button"
-                              className={`post-like-btn ${likedByMe ? 'post-like-btn--active' : ''}`}
-                              onClick={() => handleLikePost(post.id)}
-                              style={{ margin: 0 }}
-                            >
-                              <span>{likedByMe ? '❤️' : '🤍'}</span> {likeCount} Thả tim
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })
                   )}
                 </div>
-              )}
-
-              {/* SUB TAB 2: TOURNAMENTS */}
-              {communityTab === 'tournaments' && (
-                <div className="animated-fade-in">
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
-                    <button
-                      type="button"
-                      className="mushy-btn mushy-btn--primary"
-                      style={{ minHeight: 30, padding: '4px 12px', fontSize: 11.5, background: 'linear-gradient(135deg, var(--brand) 0%, var(--pink) 100%)', color: '#fff', border: 'none', borderRadius: 999 }}
-                      onClick={() => {
-                        bridge.haptic('light');
-                        setShowCreateTournament(true);
-                      }}
-                    >
-                      🏆 + Tạo Giải Đấu
-                    </button>
-                  </div>
-
-                  {tournaments.length === 0 ? (
-                    <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--muted)' }}>
-                      <div style={{ fontSize: 40, marginBottom: 8 }}>🏆</div>
-                      <p style={{ margin: 0, fontSize: 13 }}>Chưa có giải đấu nội bộ nào được thiết lập. Hãy lập giải để mọi người cùng thi đua!</p>
-                    </div>
-                  ) : (
-                    tournaments.map(tournament => {
-                      const participant = tournamentParticipants.find(p => p.tournament_id === tournament.id && p.user_id === ctx.userId);
-                      const isJoined = !!participant;
-                      const progressPercent = participant ? Math.min(100, Math.round((participant.current_value / tournament.target_value) * 100)) : 0;
-                      
-                      return (
-                        <div key={tournament.id} className="tournament-card">
-                          <div className="tournament-title-row">
-                            <h4 className="tournament-title">{tournament.title}</h4>
-                            <span className="tournament-badge-type">{getTagName(tournament.sport_code)}</span>
-                          </div>
-                          
-                          <p className="tournament-desc">{tournament.description || 'Giải thi đua phong trào nội bộ.'}</p>
-                          
-                          {/* Progress bar if joined */}
-                          {isJoined && (
-                            <div className="tournament-progress-container">
-                              <div className="tournament-progress-label">
-                                <span>Thành tích của bạn:</span>
-                                <strong>{participant.current_value} / {tournament.target_value} {tournament.target_metric} ({progressPercent}%)</strong>
-                              </div>
-                              <div className="tournament-progress-bar-bg">
-                                <div className="tournament-progress-bar-fill" style={{ width: `${progressPercent}%` }} />
-                              </div>
-                            </div>
-                          )}
-                          
-                          <div className="tournament-footer">
-                            <span className="tournament-dates">
-                              🕒 {new Date(tournament.start_at).toLocaleDateString('vi-VN')} - {new Date(tournament.end_at).toLocaleDateString('vi-VN')}
-                            </span>
-                            
-                            <div style={{ display: 'flex', gap: 8 }}>
-                              {isJoined ? (
-                                <button
-                                  type="button"
-                                  className="mushy-btn"
-                                  style={{ minHeight: 30, fontSize: 11, padding: '4px 12px', background: 'rgba(79, 70, 229, 0.08)', color: '#4F46E5', borderColor: 'rgba(79, 70, 229, 0.2)', margin: 0 }}
-                                  onClick={() => {
-                                    bridge.haptic('light');
-                                    setShowUpdateProgress(tournament);
-                                    setProgressValue('');
-                                  }}
-                                >
-                                  ✍️ Cập nhật
-                                </button>
-                              ) : (
-                                <button
-                                  type="button"
-                                  className="mushy-btn mushy-btn--primary"
-                                  style={{ minHeight: 30, fontSize: 11, padding: '4px 12px', background: 'linear-gradient(135deg, var(--brand) 0%, var(--pink) 100%)', color: '#fff', border: 'none', margin: 0 }}
-                                  onClick={() => handleJoinTournament(tournament.id)}
-                                >
-                                  Tham gia
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              )}
-
-              {/* SUB TAB 3: LEADERBOARD */}
-              {communityTab === 'leaderboards' && (
-                <div className="animated-fade-in">
-                  <div style={{ marginBottom: 16 }}>
-                    <label className="mushy-label">Chọn Giải đấu thi đua</label>
-                    <Select
-                      value={selectedTournamentId}
-                      onChange={(val) => setSelectedTournamentId(val)}
-                      options={[
-                        { value: '', label: '🛡️ Xếp hạng Uy Tín chung' },
-                        ...tournaments.map(t => ({
-                          value: t.id,
-                          label: `🏆 ${t.title}`
-                        }))
-                      ]}
-                    />
-                  </div>
-
-                  {selectedTournamentId ? (
-                    (() => {
-                      const tournament = tournaments.find(t => t.id === selectedTournamentId);
-                      if (!tournament) return null;
-
-                      // 1. Personal rankings
-                      const personalRankings = tournamentParticipants
-                        .filter(p => p.tournament_id === selectedTournamentId)
-                        .map(p => {
-                          const m = members.find(x => x.user_id === p.user_id) || (p.user_id === ctx.userId ? { full_name: 'Bạn' } : { full_name: 'Đồng nghiệp' });
-                          const prof = allProfiles[p.user_id] || {};
-                          return {
-                            user_id: p.user_id,
-                            full_name: m.full_name,
-                            department: prof.department || 'Nhân viên',
-                            value: p.current_value
-                          };
-                        })
-                        .sort((a, b) => b.value - a.value);
-
-                      // 2. Department rankings
-                      const deptRankings = {};
-                      tournamentParticipants
-                        .filter(p => p.tournament_id === selectedTournamentId)
-                        .forEach(p => {
-                          const prof = allProfiles[p.user_id] || {};
-                          const dept = prof.department || 'Chưa phân phòng';
-                          deptRankings[dept] = (deptRankings[dept] || 0) + p.current_value;
-                        });
-                      
-                      const deptList = Object.keys(deptRankings).map(dept => ({
-                        department: dept,
-                        total_value: deptRankings[dept]
-                      })).sort((a, b) => b.total_value - a.total_value);
-
-                      return (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                          {/* Personal Leaderboard card */}
-                          <section className="mushy-card" style={{ padding: 14 }}>
-                            <h4 style={{ margin: '0 0 10px', fontSize: 13.5, fontWeight: 700 }}>🏆 Bảng xếp hạng Cá nhân</h4>
-                            {personalRankings.length === 0 ? (
-                              <p style={{ fontSize: 12, color: 'var(--muted)', fontStyle: 'italic', margin: 0 }}>Chưa có thành viên nào cập nhật thành tích.</p>
-                            ) : (
-                              <table className="leaderboard-table">
-                                <thead>
-                                  <tr>
-                                    <th style={{ width: 40 }}>Hạng</th>
-                                    <th>Nhân viên</th>
-                                    <th style={{ textAlign: 'right' }}>Thành tích</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {personalRankings.map((p, idx) => {
-                                    const rank = idx + 1;
-                                    const rankClass = rank === 1 ? 'leaderboard-rank-1' : rank === 2 ? 'leaderboard-rank-2' : rank === 3 ? 'leaderboard-rank-3' : '';
-                                    return (
-                                      <tr key={p.user_id} style={{ background: p.user_id === ctx.userId ? 'rgba(230, 57, 70, 0.03)' : 'transparent' }}>
-                                        <td className={`leaderboard-rank ${rankClass}`}>{rank <= 3 ? (rank === 1 ? '🥇' : rank === 2 ? '🥈' : '🥉') : rank}</td>
-                                        <td>
-                                          <div className="leaderboard-user-info">
-                                            <span style={{ fontWeight: p.user_id === ctx.userId ? 700 : 500 }}>{p.full_name}</span>
-                                            <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>({p.department})</span>
-                                          </div>
-                                        </td>
-                                        <td className="leaderboard-value">{p.value} {tournament.target_metric}</td>
-                                      </tr>
-                                    );
-                                  })}
-                                </tbody>
-                              </table>
-                            )}
-                          </section>
-
-                          {/* Department Leaderboard card */}
-                          <section className="mushy-card" style={{ padding: 14 }}>
-                            <h4 style={{ margin: '0 0 10px', fontSize: 13.5, fontWeight: 700 }}>🏢 Bảng xếp hạng Phòng ban</h4>
-                            {deptList.length === 0 ? (
-                              <p style={{ fontSize: 12, color: 'var(--muted)', fontStyle: 'italic', margin: 0 }}>Chưa có thành tích phòng ban.</p>
-                            ) : (
-                              <table className="leaderboard-table">
-                                <thead>
-                                  <tr>
-                                    <th style={{ width: 40 }}>Hạng</th>
-                                    <th>Phòng ban</th>
-                                    <th style={{ textAlign: 'right' }}>Tổng thành tích</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {deptList.map((d, idx) => {
-                                    const rank = idx + 1;
-                                    const rankClass = rank === 1 ? 'leaderboard-rank-1' : rank === 2 ? 'leaderboard-rank-2' : rank === 3 ? 'leaderboard-rank-3' : '';
-                                    const isMyDept = myProfile.department && d.department === myProfile.department;
-                                    return (
-                                      <tr key={d.department} style={{ background: isMyDept ? 'rgba(6, 182, 212, 0.03)' : 'transparent' }}>
-                                        <td className={`leaderboard-rank ${rankClass}`}>{rank <= 3 ? (rank === 1 ? '🥇' : rank === 2 ? '🥈' : '🥉') : rank}</td>
-                                        <td>
-                                          <span style={{ fontWeight: isMyDept ? 700 : 500 }}>{d.department}</span>
-                                          {isMyDept && <span style={{ fontSize: 9.5, color: '#06B6D4', marginLeft: 4, fontWeight: 'bold' }}>(Của bạn)</span>}
-                                        </td>
-                                        <td className="leaderboard-value" style={{ color: '#06B6D4' }}>{d.total_value} {tournament.target_metric}</td>
-                                      </tr>
-                                    );
-                                  })}
-                                </tbody>
-                              </table>
-                            )}
-                          </section>
-                        </div>
-                      );
-                    })()
-                  ) : (
-                    // General Reputation Leaderboard
-                    <section className="mushy-card" style={{ padding: 14 }}>
-                      <h4 style={{ margin: '0 0 10px', fontSize: 13.5, fontWeight: 700 }}>🛡️ Bảng xếp hạng Điểm Uy Tín</h4>
-                      <table className="leaderboard-table">
-                        <thead>
-                          <tr>
-                            <th style={{ width: 40 }}>Hạng</th>
-                            <th>Thành viên</th>
-                            <th style={{ textAlign: 'right' }}>Điểm Uy Tín</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {(() => {
-                            const reputationRankings = Object.values(allProfiles)
-                              .map(p => {
-                                const m = members.find(x => x.user_id === p.user_id) || (p.user_id === ctx.userId ? { full_name: 'Bạn' } : null);
-                                if (!m) return null;
-                                return {
-                                  user_id: p.user_id,
-                                  full_name: m.full_name,
-                                  department: p.department || 'Nhân viên',
-                                  score: p.reputation_score ?? 100
-                                };
-                              })
-                              .filter(Boolean)
-                              .sort((a, b) => b.score - a.score);
-
-                            return reputationRankings.map((p, idx) => {
-                              const rank = idx + 1;
-                              const rankClass = rank === 1 ? 'leaderboard-rank-1' : rank === 2 ? 'leaderboard-rank-2' : rank === 3 ? 'leaderboard-rank-3' : '';
-                              return (
-                                <tr key={p.user_id} style={{ background: p.user_id === ctx.userId ? 'rgba(230, 57, 70, 0.03)' : 'transparent' }}>
-                                  <td className={`leaderboard-rank ${rankClass}`}>{rank <= 3 ? (rank === 1 ? '🥇' : rank === 2 ? '🥈' : '🥉') : rank}</td>
-                                  <td>
-                                    <div className="leaderboard-user-info">
-                                      <span style={{ fontWeight: p.user_id === ctx.userId ? 700 : 500 }}>{p.full_name}</span>
-                                      <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>({p.department})</span>
-                                      {p.score >= 120 && (
-                                        <span className="reputation-badge-radar" style={{ margin: '0 0 0 4px', padding: '1px 4px', fontSize: 8 }}>
-                                          {rooms.filter(r => r.host_id === p.user_id && r.status !== 'cancelled').length >= 5 ? '👑 Host' : '🌟 Đồng đội'}
-                                        </span>
-                                      )}
-                                    </div>
-                                  </td>
-                                  <td className="leaderboard-value" style={{ color: 'var(--brand)' }}>{p.score}đ</td>
-                                </tr>
-                              );
-                            });
-                          })()}
-                        </tbody>
-                      </table>
-                    </section>
-                  )}
-                </div>
-              )}
+              </section>
+              
             </div>
           )}
-
-          {/* TAB 3: INBOX - HỘP THƯ LỜI MỜI NHẬN ĐƯỢC */}
+          
+          {/* TAB 2: INBOX - HỘP THƯ LỜI MỜI NHẬN ĐƯỢC */}
           {activeTab === 'inbox' && (
-            <div className="tab-pane animated-fade-in">
+            <div className="tab-pane animated-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div className="compact-tab-header">
                 <div className="radar-pulse-wrapper" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, width: 24, height: 24 }}>
                   📥
                 </div>
-                <div className="radar-text-wrapper" style={{ flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center', minWidth: 0, gap: '12px' }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <h4 className="compact-radar-title" style={{ margin: 0, fontSize: '13.5px', fontWeight: 700 }}>Hộp thư lời mời Connect</h4>
-                    <p className="compact-radar-sub" style={{ margin: '1px 0 0', fontSize: '11px', color: 'var(--muted)', textOverflow: 'ellipsis', whiteSpace: 'nowrap', overflow: 'hidden' }}>Lời mời nhận được từ đồng nghiệp</p>
-                  </div>
+                <div className="radar-text-wrapper" style={{ flex: 1, textAlign: 'left' }}>
+                  <h4 className="compact-radar-title" style={{ margin: 0, fontSize: '13.5px', fontWeight: 700 }}>Hộp thư lời mời Connect</h4>
+                  <p className="compact-radar-sub" style={{ margin: '1px 0 0', fontSize: '11px', color: 'var(--muted)' }}>Lời mời kết nối nhận được từ đồng nghiệp</p>
                 </div>
               </div>
 
-              {invitations.filter(i => i.receiver_id === ctx.userId && i.status !== 'accepted').length === 0 ? (
-                <div className="mushy-empty-state animated-fade-in">
-                  <div className="mushy-empty-icon">📥</div>
-                  <h4 className="mushy-empty-title">Hộp thư lời mời trống</h4>
-                  <p className="mushy-empty-desc">Hiện chưa có lời mời Connect nào gửi tới bạn. Hãy thử đổi sở thích hoặc chủ động lập kèo trước nhé!</p>
-                </div>
-              ) : (
-                invitations
-                  .filter(i => i.receiver_id === ctx.userId && i.status !== 'accepted')
-                  .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-                  .map(inv => {
-                    const room = rooms.find(r => r.id === inv.room_id);
-                    if (!room) return null;
+              {(() => {
+                const incomingRequests = connectionRequests.filter(r => r.to_user_id === ctx.userId && r.status === 'pending');
 
-                    const isExpired = inv.status === 'expired' || room.status === 'expired' || room.status === 'cancelled';
-                    const hostObj = members.find(m => m.user_id === room.host_id) || { full_name: 'Đồng nghiệp' };
+                if (incomingRequests.length === 0) {
+                  return (
+                    <div className="mushy-empty-state animated-fade-in">
+                      <div className="mushy-empty-icon">📥</div>
+                      <h4 className="mushy-empty-title">Hộp thư lời mời trống</h4>
+                      <p className="mushy-empty-desc">Hiện chưa có lời mời Connect nào gửi tới bạn. Hãy thử đổi sở thích hoặc chủ động gửi lời mời trước nhé!</p>
+                    </div>
+                  );
+                }
 
-                    return (
-                      <div
-                        key={inv.id}
-                        id={`swipe-container-${inv.id}`}
-                        className="animated-fade-in"
-                        style={{ position: 'relative', overflow: 'hidden', borderRadius: 'var(--r-card)', marginBottom: 14 }}
-                      >
-                        {/* Invitation Card */}
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    {incomingRequests.map(req => {
+                      const hostObj = members.find(m => m.user_id === req.from_user_id) || { full_name: 'Đồng nghiệp' };
+                      const typeLabel = getConnectTypeLabel(req.action_type);
+                      const profileObj = allProfiles[req.from_user_id] || {};
+
+                      return (
                         <div
-                          className={`mushy-card invitation-card ${isExpired ? 'invitation-card--expired' : ''}`}
-                          style={{
-                            margin: 0,
-                            position: 'relative',
-                            zIndex: 2
-                          }}
+                          key={req.id}
+                          className="mushy-card invitation-card"
+                          style={{ margin: 0, textAlign: 'left' }}
                         >
                           <div className="buddy-card-header">
-                            <div className="buddy-avatar-wrapper" style={{ width: 44, height: 44, flexShrink: 0 }}>
+                            <div className="buddy-avatar-wrapper" style={{
+                              width: 44,
+                              height: 44,
+                              flexShrink: 0,
+                              background: getAvatarGradient(hostObj.full_name?.charAt(0)),
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: 16,
+                              fontWeight: 'bold',
+                              color: '#fff'
+                            }}>
                               <span>{hostObj.full_name?.charAt(0)}</span>
                             </div>
                             <div className="buddy-info" style={{ flex: 1, minWidth: 0 }}>
-                              <h4 style={{ fontSize: '14.5px', fontWeight: 700, color: 'var(--ink)', margin: 0, lineHeight: 1.35, display: 'block' }}>
-                                Kèo Connect từ <strong>{hostObj.full_name}</strong>
+                              <h4 style={{ fontSize: '14.5px', fontWeight: 800, color: 'var(--ink)', margin: 0, lineHeight: 1.35 }}>
+                                Lời mời từ {hostObj.full_name}
                               </h4>
                               <p style={{ margin: '3px 0 0', fontSize: 12, color: 'var(--muted)', lineHeight: 1.35 }}>
-                                🎯 Thẻ: <strong>{getTagName(room.child_code)}</strong> · 📍 Địa điểm: <strong>{room.location}</strong>
+                                🏢 {profileObj.department || 'Phòng ban'} · 📍 {profileObj.facility || 'Cơ sở'}
                               </p>
                             </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-                              <span className={`grant-direction-tag ${inv.status === 'accepted' ? 'grant-direction-tag--in' : 'grant-direction-tag--out'}`} style={{ background: inv.status === 'accepted' ? '#10B981' : inv.status === 'pending' ? '#F59E0B' : '#9CA3AF', color: '#fff', whiteSpace: 'nowrap', margin: 0 }}>
-                                {inv.status === 'accepted' ? 'Đã Chấp Nhận' : inv.status === 'declined' ? 'Từ chối' : inv.status === 'pending' ? 'Đang Chờ' : 'Hết hạn'}
-                              </span>
-                              <button
-                                onClick={() => handleDeleteInvitation(inv.id)}
-                                style={{
-                                  background: 'rgba(239, 68, 68, 0.07)',
-                                  border: 'none',
-                                  borderRadius: '50%',
-                                  width: '28px',
-                                  height: '28px',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  cursor: 'pointer',
-                                  color: '#EF4444',
-                                  fontSize: '13px',
-                                  transition: 'background 0.2s ease, transform 0.1s ease',
-                                  padding: 0
-                                }}
-                                onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)'}
-                                onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.07)'}
-                                title="Xóa lời mời"
-                              >
-                                🗑️
-                              </button>
-                            </div>
+                            <span style={{
+                              fontSize: '10.5px',
+                              fontWeight: '700',
+                              padding: '2px 8px',
+                              background: 'var(--brand-soft)',
+                              color: 'var(--brand)',
+                              borderRadius: '6px',
+                              flexShrink: 0
+                            }}>
+                              {typeLabel}
+                            </span>
                           </div>
 
-                          <div style={{ marginTop: 8, fontSize: 12, color: 'var(--muted)' }}>
-                            ⏰ Thời gian: <strong>{formatTime(room.scheduled_at)}</strong>
-                          </div>
-
-                          {/* Expired UX (PRD Section 8.2) */}
-                          {isExpired ? (
-                            <div className="expired-badge">
-                              Rất tiếc, phòng hẹn đã đủ thành viên hoặc đã bị hủy. Hẹn bạn kèo sau nhé! 🍄
+                          {req.message_template && (
+                            <div style={{
+                              marginTop: 10,
+                              padding: '10px 12px',
+                              background: 'rgba(15,15,18,0.02)',
+                              borderRadius: 12,
+                              fontSize: 12.5,
+                              color: 'var(--ink)',
+                              border: '1px solid var(--hairline)',
+                              lineHeight: 1.4
+                            }}>
+                              💬 "{req.message_template}"
                             </div>
-                          ) : (
-                            inv.status === 'pending' && (
-                              <div style={{ display: 'flex', gap: 10, marginTop: 12, borderTop: '1px solid var(--hairline)', paddingTop: 12 }}>
-                                <button
-                                  className="mushy-btn mushy-btn--primary"
-                                  style={{ flex: 1, minHeight: 38, height: 38, padding: '0 16px', fontSize: 13.5 }}
-                                  onClick={() => handleAcceptInvitation(inv)}
-                                >
-                                  Chấp nhận tham gia
-                                </button>
-                                <button
-                                  className="mushy-btn mushy-btn--ghost"
-                                  style={{ 
-                                    color: 'var(--danger)', 
-                                    borderColor: 'var(--danger)', 
-                                    minHeight: 38, 
-                                    height: 38, 
-                                    padding: '0 16px', 
-                                    fontSize: 13.5, 
-                                    whiteSpace: 'nowrap' 
-                                  }}
-                                  onClick={() => handleDeclineInvitation(inv)}
-                                >
-                                  Từ chối
-                                </button>
-                              </div>
-                            )
                           )}
+
+                          <div style={{ display: 'flex', gap: 10, marginTop: 14, borderTop: '1px solid var(--hairline)', paddingTop: 12 }}>
+                            <button
+                              className="mushy-btn mushy-btn--primary"
+                              style={{ flex: 1, minHeight: 36, height: 36, fontSize: 13, fontWeight: 700 }}
+                              onClick={() => handleRespondRequest(req.id, 'accepted')}
+                            >
+                              Chấp nhận
+                            </button>
+                            <button
+                              className="mushy-btn mushy-btn--ghost"
+                              style={{ 
+                                color: 'var(--danger)', 
+                                borderColor: 'var(--danger)', 
+                                flex: 1,
+                                minHeight: 36, 
+                                height: 36, 
+                                fontSize: 13, 
+                                fontWeight: 700
+                              }}
+                              onClick={() => handleRespondRequest(req.id, 'declined')}
+                            >
+                              Từ chối
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })
-              )}
+                      );
+                    })}
+                  </div>
+                );
+              })()}
             </div>
           )}
-
+          
           {/* TAB 4: PROFILE - HỒ SƠ CÁ NHÂN */}
           {activeTab === 'profile' && (
             <div className="tab-pane animated-fade-in">
@@ -6760,120 +2799,71 @@ export default function App() {
         </>
       )}
 
-      {/* QUICK INVITE MODAL */}
-      {quickInviteData && (
-        <div className="modal-scrim dialog-scrim animated-fade-in" onClick={() => setQuickInviteData(null)}>
-          <div className="modal-card" style={{ maxWidth: 420, textAlign: 'left', display: 'flex', flexDirection: 'column', maxHeight: '95dvh' }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, borderBottom: '1px solid var(--hairline)', paddingBottom: 8 }}>
-              <h3 className="dialog-title" style={{ fontSize: 16, display: 'flex', alignItems: 'center', gap: 6, margin: 0 }}>
-                <span>⚡</span> Lập kèo nhanh
-              </h3>
-              <button 
-                type="button"
-                onClick={() => setQuickInviteData(null)}
-                style={{ border: 'none', background: 'transparent', fontSize: 22, cursor: 'pointer', color: 'var(--muted)', padding: '0 4px', lineHeight: 1 }}
-              >
-                ×
-              </button>
-            </div>
+      {/* QUICK CONNECT BOTTOM SHEET (TYPED ACTIONS) */}
+      {showConnectSheet && selectedConnectBuddy && (() => {
+        const buddyProfile = allProfiles[selectedConnectBuddy.user_id] || {};
+        const isNewbieBuddy = myProfile.is_newbie && buddyProfile.is_buddy_helper;
 
-            <div style={{ overflowY: 'auto', flex: 1, paddingRight: 2 }}>
-              <div style={{ display: 'flex', gap: 12, alignItems: 'center', background: 'rgba(230,57,70,0.03)', padding: 12, borderRadius: 12, border: '1px solid rgba(230,57,70,0.08)', marginBottom: 16 }}>
-                <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'var(--brand-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 'bold', color: 'var(--brand)' }}>
-                  {quickInviteData.member.full_name?.charAt(0)}
-                </div>
-                <div>
-                  <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--ink)' }}>Rủ {quickInviteData.member.full_name}</div>
-                  <div style={{ fontSize: 11, color: 'var(--muted)' }}>Cùng tham gia hoạt động: <strong>{quickInviteData.tagName}</strong></div>
-                </div>
-              </div>
-
-              {/* Time selection grid */}
-              <div style={{ marginBottom: 14 }}>
-                <label className="mushy-label" style={{ fontSize: 11.5 }}>Chọn thời gian rảnh nhanh (Khớp giờ rảnh)</label>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
-                  {quickTimeOptions.map(opt => (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      className={`selectable-chip ${quickInviteTime === opt.value ? 'selectable-chip--selected' : ''}`}
-                      style={{ padding: '6px 12px', fontSize: 11.5, textAlign: 'center', margin: 0, maxWidth: 'none', whiteSpace: 'nowrap' }}
-                      onClick={() => { bridge.haptic('light'); setQuickInviteTime(opt.value); }}
-                    >
-                      {opt.icon} {opt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Location selection grid */}
-              <div style={{ marginBottom: 14 }}>
-                <label className="mushy-label" style={{ fontSize: 11.5 }}>Địa điểm gặp mặt</label>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
-                  {['Căn tin công ty 🍲', 'Sân thể thao gần cty 🏸', 'Quán cafe tầng G ☕', 'Khu vực Pantry 🥤'].map(loc => (
-                    <button
-                      key={loc}
-                      type="button"
-                      className={`selectable-chip ${quickInviteLocation === loc ? 'selectable-chip--selected' : ''}`}
-                      style={{ padding: '6px 12px', fontSize: 11.5, margin: 0, maxWidth: 'none', whiteSpace: 'nowrap' }}
-                      onClick={() => { bridge.haptic('light'); setQuickInviteLocation(loc); }}
-                    >
-                      {loc}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* AI Icebreaker */}
-              <div style={{ marginBottom: 14 }}>
-                <button
+        return (
+          <div className="modal-scrim dialog-scrim animated-fade-in" onClick={() => { setShowConnectSheet(false); setSelectedConnectBuddy(null); }}>
+            <div className="modal-card bottom-sheet-card animated-slide-up" style={{
+              maxWidth: 420,
+              textAlign: 'left',
+              display: 'flex',
+              flexDirection: 'column',
+              maxHeight: '90vh',
+              marginTop: 'auto',
+              borderRadius: '24px 24px 0 0',
+              padding: '20px 24px 34px',
+              borderBottomLeftRadius: 0,
+              borderBottomRightRadius: 0,
+              animation: 'sheet-slide-up 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards'
+            }} onClick={(e) => e.stopPropagation()}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, borderBottom: '1px solid var(--hairline)', paddingBottom: 12 }}>
+                <h3 style={{ fontSize: 16, fontWeight: 800, margin: 0, color: 'var(--ink)' }}>
+                  ⚡ Gửi lời mời tới {selectedConnectBuddy.full_name}
+                </h3>
+                <button 
                   type="button"
-                  className="mushy-btn mushy-btn--ghost mushy-btn--block"
-                  disabled={loadingIcebreaker}
-                  onClick={handleGetIcebreaker}
-                  style={{ fontSize: 12.5, minHeight: 38 }}
+                  onClick={() => { setShowConnectSheet(false); setSelectedConnectBuddy(null); }}
+                  style={{ border: 'none', background: 'transparent', fontSize: 24, cursor: 'pointer', color: 'var(--muted)', padding: '0 4px', lineHeight: 1 }}
                 >
-                  {loadingIcebreaker
-                    ? <><span className="mushy-spinner" style={{ width: 14, height: 14, marginRight: 6 }} /> Đang nghĩ câu mở đầu...</>
-                    : '🤖 Gợi ý câu mở đầu bằng AI'}
+                  ×
                 </button>
-                {icebreakerMsg && (
-                  <div className="icebreaker-msg-box" style={{ marginTop: 8, padding: '10px 14px', background: 'rgba(168,85,247,0.04)', border: '1px solid rgba(168,85,247,0.15)', borderRadius: 12, fontSize: 12.5, color: 'var(--ink)', lineHeight: 1.6 }}>
-                    "{icebreakerMsg}"
-                    <button
-                      type="button"
-                      style={{ display: 'block', marginTop: 6, fontSize: 11, background: 'none', border: 'none', color: 'var(--brand)', cursor: 'pointer', padding: 0, fontWeight: 600 }}
-                      onClick={() => { bridge.copyText(icebreakerMsg); dialog.success('Đã copy!', 'Câu mở đầu đã được sao chép vào clipboard.'); }}
-                    >
-                      📋 Copy câu này
-                    </button>
-                  </div>
-                )}
               </div>
-            </div>
 
-            <div className="form-actions" style={{ borderTop: '1px solid var(--hairline)', paddingTop: 10, marginTop: 10, paddingBottom: 0 }}>
-              <button
-                type="button"
-                className="mushy-btn mushy-btn--ghost"
-                style={{ height: 34, fontSize: 12.5 }}
-                onClick={() => setQuickInviteData(null)}
-              >
-                Hủy
-              </button>
-              <button
-                type="button"
-                className="mushy-btn mushy-btn--primary btn-glow-brand" 
-                style={{ height: 34, fontSize: 12.5 }}
-                disabled={submittingQuickInvite || !quickInviteTime}
-                onClick={handleQuickInviteSubmit}
-              >
-                {submittingQuickInvite ? 'Đang gửi...' : 'Gửi lời mời nhanh 🚀'}
-              </button>
+              <div style={{ overflowY: 'auto', flex: 1, paddingRight: 2 }}>
+                <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 14 }}>
+                  Chọn hình thức kết nối phù hợp để tự động gửi lời nhắn châm ngòi cuộc gặp gỡ ngoài đời thực:
+                </p>
+
+                <div className="quick-action-list">
+                  {[
+                    { type: 'food', icon: '🍴', title: 'Ăn uống', desc: 'Rủ nhau ăn trưa hoặc cafe ngắn chớp nhoáng', msg: 'Chào bạn, mình muốn rủ bạn ăn trưa/cafe để làm quen và trao đổi thêm nhé!' },
+                    { type: 'sport', icon: '⚽', title: 'Thể thao', desc: 'Tìm người tập cùng, chạy bộ hoặc chơi bóng sau giờ làm', msg: 'Chào bạn, mình thấy bạn cũng thích thể thao, hôm nào chúng ta giao lưu nhé!' },
+                    { type: 'knowledge', icon: '📖', title: 'Tri thức', desc: 'Chia sẻ kinh nghiệm chuyên môn, học hỏi kỹ năng chéo', msg: 'Chào bạn, mình rất ấn tượng với profile của bạn và muốn kết nối trao đổi tri thức!' },
+                    { type: 'casual', icon: '💬', title: 'Tán gẫu', desc: 'Làm quen trò chuyện nhẹ nhàng, tự nhiên không áp lực', msg: 'Chào bạn, mình muốn kết nối làm quen trò chuyện nhẹ nhàng lúc rảnh.' },
+                    ...(isNewbieBuddy ? [{ type: 'intro_meet', icon: '🤝', title: 'Lập lịch làm quen', desc: 'Dành riêng cho nhân viên mới kết nối với Buddy hỗ trợ', msg: 'Chào anh/chị, em là người mới onboard. Em rất mong được kết nối và học hỏi kinh nghiệm làm việc từ anh/chị!' }] : [])
+                  ].map(action => (
+                    <button
+                      key={action.type}
+                      type="button"
+                      className="quick-action-item"
+                      onClick={() => handleSendConnectionRequest(selectedConnectBuddy.user_id, action.type, action.msg)}
+                    >
+                      <div className="quick-action-icon">{action.icon}</div>
+                      <div className="quick-action-info">
+                        <div className="quick-action-name">{action.title}</div>
+                        <div className="quick-action-desc">{action.desc}</div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* PROFILE CONFIGURATION MODAL */}
       {showProfileModal && (
@@ -6993,6 +2983,118 @@ export default function App() {
                 </div>
               </div>
 
+              {/* USER ROLES */}
+              <div style={{ borderTop: '1px solid var(--hairline)', paddingTop: 18, marginTop: 18 }}>
+                <label className="mushy-label">Vai trò thành viên (User Roles)</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 13 }}>
+                    <input
+                      type="checkbox"
+                      style={{ accentColor: 'var(--brand)' }}
+                      checked={!!myProfile.is_newbie}
+                      onChange={(e) => setMyProfile(prev => ({ ...prev, is_newbie: e.target.checked }))}
+                    />
+                    <span>Tôi là nhân viên mới (Intern / Onboard tuần đầu) 👶</span>
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 13 }}>
+                    <input
+                      type="checkbox"
+                      style={{ accentColor: 'var(--brand)' }}
+                      checked={!!myProfile.is_buddy_helper}
+                      onChange={(e) => setMyProfile(prev => ({ ...prev, is_buddy_helper: e.target.checked }))}
+                    />
+                    <span>Tôi sẵn sàng hỗ trợ người mới làm quen môi trường 🤝</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* CONNECT TYPES */}
+              <div style={{ borderTop: '1px solid var(--hairline)', paddingTop: 18, marginTop: 18 }}>
+                <label className="mushy-label">Ưu tiên hình thức kết nối (Connect Types)</label>
+                <p style={{ fontSize: 11.5, color: 'var(--muted)', margin: '2px 0 8px' }}>Chọn các hoạt động bạn muốn giao lưu cùng đồng nghiệp</p>
+                <div className="chips-container">
+                  {[
+                    { code: 'food', label: '🍴 Ăn uống / Cafe' },
+                    { code: 'sport', label: '⚽ Thể thao' },
+                    { code: 'knowledge', label: '📖 Tri thức' },
+                    { code: 'casual', label: '💬 Tán gẫu' }
+                  ].map(ct => {
+                    const isSelected = (myProfile.connect_types || []).includes(ct.code);
+                    return (
+                      <span
+                        key={ct.code}
+                        className={`selectable-chip ${isSelected ? 'selectable-chip--selected' : ''}`}
+                        onClick={() => {
+                          bridge.haptic('light');
+                          setMyProfile(prev => {
+                            const current = prev.connect_types || [];
+                            const next = isSelected ? current.filter(x => x !== ct.code) : [...current, ct.code];
+                            return { ...prev, connect_types: next };
+                          });
+                        }}
+                      >
+                        {ct.label}
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* KNOWLEDGE SHARING */}
+              <div style={{ borderTop: '1px solid var(--hairline)', paddingTop: 18, marginTop: 18 }}>
+                <label className="mushy-label">Kỹ năng tôi có thể chia sẻ (Share Skills)</label>
+                <p style={{ fontSize: 11.5, color: 'var(--muted)', margin: '2px 0 8px' }}>Chọn kỹ năng bạn tự tin hướng dẫn, trao đổi cho đồng nghiệp</p>
+                <div className="chips-container">
+                  {['JavaScript', 'Python', 'React', 'Node.js', 'Project Management', 'Design', 'Marketing', 'Sales', 'Data Analysis', 'Public Speaking'].map(skill => {
+                    const isSelected = (myProfile.share_skills || []).includes(skill);
+                    return (
+                      <span
+                        key={skill}
+                        className={`selectable-chip ${isSelected ? 'selectable-chip--selected' : ''}`}
+                        style={isSelected ? {} : { background: 'rgba(16,185,129,0.06)', borderColor: 'rgba(16,185,129,0.2)', color: '#10B981' }}
+                        onClick={() => {
+                          bridge.haptic('light');
+                          setMyProfile(prev => {
+                            const current = prev.share_skills || [];
+                            const next = isSelected ? current.filter(x => x !== skill) : [...current, skill];
+                            return { ...prev, share_skills: next };
+                          });
+                        }}
+                      >
+                        📖 {skill}
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div style={{ borderTop: '1px solid var(--hairline)', paddingTop: 18, marginTop: 18 }}>
+                <label className="mushy-label">Kỹ năng tôi muốn học hỏi (Learn Skills)</label>
+                <p style={{ fontSize: 11.5, color: 'var(--muted)', margin: '2px 0 8px' }}>Chọn kỹ năng bạn đang muốn tìm hiểu hoặc cải thiện</p>
+                <div className="chips-container">
+                  {['JavaScript', 'Python', 'React', 'Node.js', 'Project Management', 'Design', 'Marketing', 'Sales', 'Data Analysis', 'Public Speaking'].map(skill => {
+                    const isSelected = (myProfile.learn_skills || []).includes(skill);
+                    return (
+                      <span
+                        key={skill}
+                        className={`selectable-chip ${isSelected ? 'selectable-chip--selected' : ''}`}
+                        style={isSelected ? {} : { background: 'rgba(245,158,11,0.06)', borderColor: 'rgba(245,158,11,0.2)', color: '#D97706' }}
+                        onClick={() => {
+                          bridge.haptic('light');
+                          setMyProfile(prev => {
+                            const current = prev.learn_skills || [];
+                            const next = isSelected ? current.filter(x => x !== skill) : [...current, skill];
+                            return { ...prev, learn_skills: next };
+                          });
+                        }}
+                      >
+                        🎓 {skill}
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+
               {/* SEARCH BAR LỌC NHANH */}
               <div style={{ borderTop: '1px solid var(--hairline)', paddingTop: 18, marginTop: 18 }}>
                 <h4 style={{ margin: '0 0 10px', fontSize: 14 }}>Hệ thống thẻ sở thích (Tag Taxonomy - Accordion & Lọc Nhanh)</h4>
@@ -7064,54 +3166,6 @@ export default function App() {
                 onClick={() => setShowProfileModal(false)}
               >
                 Hủy
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* HOST CANCEL WITH REASONS MODAL (PRD Section 7.2) */}
-      {showCancelModal && (
-        <div className="modal-scrim dialog-scrim animated-fade-in" onClick={() => setShowCancelModal(null)}>
-          <div className="modal-card dialog-card" onClick={(e) => e.stopPropagation()}>
-            <div className="dialog-icon" style={{ background: 'rgba(230, 57, 70, 0.1)', color: 'var(--brand)' }}>
-              🚨
-            </div>
-            <h3 className="dialog-title">Yêu cầu lý do hủy kèo</h3>
-            <p className="dialog-body" style={{ textAlign: 'left', marginBottom: 12 }}>
-              Hệ thống Connect bảo vệ văn hóa gắn kết văn minh. Vui lòng chọn hoặc nhập lý do để tự động gửi thông báo trang trọng tới nhóm chat trước khi đóng.
-            </p>
-
-            <div style={{ marginBottom: 14 }}>
-              <label className="mushy-label">Chọn lý do hủy phòng</label>
-              <Select
-                value={cancelReason}
-                onChange={(val) => setCancelReason(val)}
-                options={[
-                  { value: 'Bận việc đột xuất', label: 'Bận việc đột xuất 💼' },
-                  { value: 'Lý do thời tiết bất lợi', label: 'Lý do thời tiết bất lợi 🌧️' },
-                  { value: 'Thay đổi kế hoạch tổ chức', label: 'Thay đổi kế hoạch tổ chức 🔄' },
-                  { value: 'Không đủ số lượng thành viên tham gia mong muốn', label: 'Không đủ số lượng thành viên 👥' }
-                ]}
-              />
-            </div>
-
-            <div style={{ marginBottom: 18 }}>
-              <label className="mushy-label">Lý do cụ thể khác (tùy chọn)</label>
-              <textarea
-                className="mushy-input"
-                placeholder="Nhập lý do chi tiết..."
-                value={cancelReason}
-                onChange={(e) => setCancelReason(e.target.value)}
-              />
-            </div>
-
-            <div className="form-actions" style={{ display: 'flex', gap: 10 }}>
-              <button className="mushy-btn mushy-btn--danger mushy-btn--block" onClick={handleCancelRoomSubmit}>
-                Xác nhận Hủy phòng
-              </button>
-              <button className="mushy-btn mushy-btn--ghost mushy-btn--block" onClick={() => setShowCancelModal(null)}>
-                Bỏ qua
               </button>
             </div>
           </div>
@@ -7208,16 +3262,15 @@ export default function App() {
         </div>
       )}
 
-      {/* IN-APP CHAT MODAL */}
-      {activeChatRoom && (() => {
-        const room = rooms.find(r => r.id === activeChatRoom.id) || activeChatRoom;
-        const roomLocation = room.location;
-        const childCode = room.child_code;
-        const messages = parseChatMessages(room.chat_group_id);
-        const hostObj = members.find(m => m.user_id === room.host_id) || (room.host_id === ctx.userId ? { full_name: 'Bạn' } : { full_name: 'Đồng nghiệp' });
+      {/* IN-APP CHAT MODAL FOR 1-1 CONNECTION */}
+      {activeChatConnection && (() => {
+        const buddyId = activeChatConnection.from_user_id === ctx.userId ? activeChatConnection.to_user_id : activeChatConnection.from_user_id;
+        const buddyMember = members.find(m => m.user_id === buddyId) || { full_name: 'Đồng nghiệp' };
+        const messages = parseChatMessages(activeChatConnection.chat_group_id);
+        const actionLabel = getConnectTypeLabel(activeChatConnection.action_type);
 
         return (
-          <div className="modal-scrim animated-fade-in" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }} onClick={() => setActiveChatRoom(null)}>
+          <div className="modal-scrim animated-fade-in" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }} onClick={() => setActiveChatConnection(null)}>
             <div className="modal-card" style={{ width: '100%', maxWidth: '480px', height: '85vh', maxHeight: '720px', borderRadius: '24px', padding: 0, display: 'flex', flexDirection: 'column', background: 'rgba(255, 255, 255, 0.85)', backdropFilter: 'blur(24px)', border: '1.5px solid rgba(255, 255, 255, 0.45)', boxShadow: '0 20px 40px rgba(0,0,0,0.1)' }} onClick={(e) => e.stopPropagation()}>
               
               {/* Chat Header */}
@@ -7226,15 +3279,15 @@ export default function App() {
                   <span style={{ fontSize: 24 }}>💬</span>
                   <div style={{ textAlign: 'left' }}>
                     <h3 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: 'var(--ink)' }}>
-                      Kèo: {getTagName(childCode)}
+                      Trò chuyện với {buddyMember.full_name}
                     </h3>
                     <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--muted)' }}>
-                      📍 {roomLocation} · Host: {hostObj.full_name}
+                      ⚡ Hình thức: {actionLabel}
                     </p>
                   </div>
                 </div>
                 <button
-                  onClick={() => setActiveChatRoom(null)}
+                  onClick={() => setActiveChatConnection(null)}
                   style={{ background: 'rgba(0,0,0,0.05)', border: 'none', borderRadius: '50%', width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 14, color: 'var(--muted)' }}
                 >
                   ✕
@@ -7249,13 +3302,13 @@ export default function App() {
                 {messages.length === 0 ? (
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, color: 'var(--muted)', opacity: 0.8 }}>
                     <span style={{ fontSize: 44, marginBottom: 8 }}>💬🍄</span>
-                    <span style={{ fontSize: 13, fontStyle: 'italic' }}>Chưa có tin nhắn nào trong phòng.</span>
-                    <span style={{ fontSize: 11, marginTop: 4 }}>Hãy là người nhắn lời chào đầu tiên nhé!</span>
+                    <span style={{ fontSize: 13, fontStyle: 'italic' }}>Chưa có tin nhắn nào.</span>
+                    <span style={{ fontSize: 11, marginTop: 4 }}>Hãy gửi tin nhắn để bắt đầu câu chuyện nhé!</span>
                   </div>
                 ) : (
                   messages.map((msg) => {
                     const isMe = msg.senderId === ctx.userId;
-                    const senderName = getSenderName(msg.senderId, room.host_id);
+                    const senderName = isMe ? 'Bạn' : buddyMember.full_name;
                     const formattedTime = new Date(msg.timestamp).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
 
                     return (
@@ -7303,24 +3356,24 @@ export default function App() {
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
-                  handleSendChatMessage(room, chatInput);
-                  setChatInput('');
+                  handleSendChatMessageForBuddy(activeChatConnection.id, buddyChatInput);
+                  setBuddyChatInput('');
                 }}
                 style={{ padding: '14px 16px', borderTop: '1px solid var(--hairline)', background: '#fff', borderBottomLeftRadius: '24px', borderBottomRightRadius: '24px', display: 'flex', gap: 10 }}
               >
                 <input
                   type="text"
                   className="mushy-input"
-                  placeholder="Nhập tin nhắn đi chill..."
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
+                  placeholder="Nhập tin nhắn..."
+                  value={buddyChatInput}
+                  onChange={(e) => setBuddyChatInput(e.target.value)}
                   style={{ flex: 1, margin: 0, borderRadius: '20px', minHeight: '38px', height: '38px', fontSize: '13px', padding: '0 16px' }}
                 />
                 <button
                   type="submit"
                   className="mushy-btn mushy-btn--primary"
                   style={{ minHeight: '38px', height: '38px', borderRadius: '50%', width: '38px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
-                  disabled={!chatInput.trim()}
+                  disabled={!buddyChatInput.trim()}
                 >
                   🚀
                 </button>
@@ -7330,7 +3383,6 @@ export default function App() {
           </div>
         );
       })()}
-
       </div>
     );
   }
