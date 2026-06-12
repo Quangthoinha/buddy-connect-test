@@ -417,6 +417,8 @@ export default function App() {
   // Cross-Workspace Sharing states
   const [showSharingModal, setShowSharingModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteSelectedUserId, setInviteSelectedUserId] = useState('');
 
   const [shareCodeInput, setShareCodeInput] = useState('');
   const [radarPage, setRadarPage] = useState(1);
@@ -2188,6 +2190,35 @@ export default function App() {
                 })()}
               </div>
 
+              {/* Button Gửi Lời Mời Kết Nối */}
+              <button
+                type="button"
+                className="mushy-btn mushy-btn--primary"
+                style={{
+                  width: '100%',
+                  minHeight: '44px',
+                  height: '44px',
+                  borderRadius: '20px',
+                  fontSize: '13.5px',
+                  fontWeight: '800',
+                  background: 'linear-gradient(135deg, var(--brand) 0%, #E63946 100%)',
+                  border: 'none',
+                  color: '#fff',
+                  boxShadow: '0 8px 20px rgba(230, 57, 70, 0.1)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  marginBottom: '4px'
+                }}
+                onClick={() => {
+                  bridge.haptic('light');
+                  setShowInviteModal(true);
+                }}
+              >
+                <span>➕</span> Gửi lời mời kết nối mới
+              </button>
+
               {/* Confirmation Prompt Carousel / List */}
               {(() => {
                 const pendingConfirmationMeetings = connectionMeetings.filter(m => {
@@ -2864,6 +2895,98 @@ export default function App() {
           </div>
         );
       })()}
+
+      {/* DIRECT INVITATION MODAL */}
+      {showInviteModal && (
+        <div className="modal-scrim dialog-scrim animated-fade-in" onClick={() => { setShowInviteModal(false); setInviteSelectedUserId(''); }}>
+          <div className="modal-card dialog-card form-slide-down" style={{ maxWidth: 420, textAlign: 'left', display: 'flex', flexDirection: 'column', maxHeight: '90dvh' }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, borderBottom: '1px solid var(--hairline)', paddingBottom: 10 }}>
+              <h3 className="dialog-title" style={{ fontSize: 16, display: 'flex', alignItems: 'center', gap: 8, margin: 0, fontWeight: 800 }}>
+                <span>🤝</span> Gửi lời mời kết nối mới
+              </h3>
+              <button 
+                type="button"
+                onClick={() => { setShowInviteModal(false); setInviteSelectedUserId(''); }}
+                style={{ border: 'none', background: 'transparent', fontSize: 24, cursor: 'pointer', color: 'var(--muted)', padding: '0 4px', lineHeight: 1 }}
+              >
+                ×
+              </button>
+            </div>
+
+            <div style={{ overflowY: 'auto', flex: 1, paddingRight: 4, paddingBottom: 10 }}>
+              <p className="mushy-section-sub" style={{ margin: '0 0 16px', fontSize: '12.5px', color: 'var(--muted)' }}>
+                Chọn một đồng nghiệp trong workspace để bắt đầu gửi lời mời kết nối.
+              </p>
+
+              <div style={{ marginBottom: 20 }}>
+                <label className="mushy-label" style={{ marginBottom: 8, display: 'block', fontSize: '13px', fontWeight: '700' }}>Đồng nghiệp</label>
+                <Select
+                  value={inviteSelectedUserId}
+                  onChange={(val) => setInviteSelectedUserId(val)}
+                  placeholder="— Chọn đồng nghiệp để kết nối —"
+                  options={members.map(m => {
+                    const prof = allProfiles[m.user_id] || {};
+                    const deptText = prof.department ? ` (${prof.department})` : '';
+                    return {
+                      value: m.user_id,
+                      label: `${m.full_name}${deptText}`
+                    };
+                  })}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
+                <button
+                  type="button"
+                  className="mushy-btn"
+                  style={{
+                    flex: 1,
+                    minHeight: '38px',
+                    height: '38px',
+                    fontSize: '12.5px',
+                    borderColor: 'var(--hairline)',
+                    background: 'transparent',
+                    color: 'var(--ink)',
+                    fontWeight: '600'
+                  }}
+                  onClick={() => {
+                    setShowInviteModal(false);
+                    setInviteSelectedUserId('');
+                  }}
+                >
+                  Hủy
+                </button>
+                <button
+                  type="button"
+                  className="mushy-btn mushy-btn--primary"
+                  style={{
+                    flex: 2,
+                    minHeight: '38px',
+                    height: '38px',
+                    fontSize: '12.5px',
+                    fontWeight: '700',
+                    background: 'var(--brand)',
+                    borderColor: 'var(--brand)',
+                    color: '#fff'
+                  }}
+                  disabled={!inviteSelectedUserId}
+                  onClick={() => {
+                    const targetBuddy = members.find(m => m.user_id === inviteSelectedUserId);
+                    if (targetBuddy) {
+                      setShowInviteModal(false);
+                      setInviteSelectedUserId('');
+                      setSelectedConnectBuddy(targetBuddy);
+                      setShowConnectSheet(true);
+                    }
+                  }}
+                >
+                  Tiếp tục
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* PROFILE CONFIGURATION MODAL */}
       {showProfileModal && (
