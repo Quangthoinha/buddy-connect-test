@@ -49,7 +49,7 @@ function makeClient(schemaName) {
   // Không setAuth → Realtime treat sub là anon → RLS chặn → INSERT/UPDATE/DELETE
   // event không deliver. setAuth attach token vào WS connection.
   // Token expire sau ~1h → realtime cần re-subscribe sau khi refresh; xem realtime.js.
-  if (ctx.token) {
+  if (ctx.token && client && client.realtime) {
     try { client.realtime.setAuth(ctx.token); } catch { /* older supabase-js */ }
   }
   return client;

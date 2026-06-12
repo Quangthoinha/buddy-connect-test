@@ -482,7 +482,7 @@ export default function App() {
   // Reset icebreaker message khi đổi người mời
   useEffect(() => {
     setIcebreakerMsg('');
-  }, [quickInviteData]);
+  }, [selectedConnectBuddy]);
 
   // Load complete state from DB
   async function loadData(silent = false) {
@@ -838,7 +838,7 @@ export default function App() {
           action_type: actionType,
           status: 'pending',
           message_template: messageTemplate || '',
-          chat_group_id: chatGroupId,
+          chat_messages: chatGroupId,
           created_at: new Date().toISOString()
         })
         .select()
@@ -1059,7 +1059,7 @@ export default function App() {
     const req = connectionRequests.find(r => r.id === requestId);
     if (!req) return;
 
-    const currentMessages = parseChatMessages(req.chat_group_id);
+    const currentMessages = parseChatMessages(req.chat_messages);
     const newMessage = {
       id: `msg-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       senderId: ctx.userId,
@@ -1072,7 +1072,7 @@ export default function App() {
     try {
       await db
         .from('connection_requests')
-        .update({ chat_group_id: newChatGroupId })
+        .update({ chat_messages: newChatGroupId })
         .eq('id', requestId);
     } catch (e) {
       console.error('Failed to send buddy chat message:', e);
@@ -1409,8 +1409,8 @@ export default function App() {
 
   // Gọi AI Icebreaker — gợi ý câu mở đầu khi rủ nhanh
   const handleGetIcebreaker = async () => {
-    if (!quickInviteData) return;
-    const toProfile = allProfiles[quickInviteData.member.user_id] || {};
+    if (!selectedConnectBuddy) return;
+    const toProfile = allProfiles[selectedConnectBuddy.user_id] || {};
     setLoadingIcebreaker(true);
     try {
       const res = await fetch('/api/icebreaker', {
@@ -1428,8 +1428,8 @@ export default function App() {
             career_goals: myGoals,
           },
           toUser: {
-            full_name: quickInviteData.member.full_name,
-            tags: allUserTags[quickInviteData.member.user_id] || [],
+            full_name: selectedConnectBuddy.full_name,
+            tags: allUserTags[selectedConnectBuddy.user_id] || [],
             career_goals: toProfile.career_goals || [],
           },
         }),
@@ -1441,7 +1441,7 @@ export default function App() {
       if (data.message) setIcebreakerMsg(data.message);
     } catch (e) {
       console.warn('[icebreaker] failed:', e);
-      setIcebreakerMsg(`Chào ${quickInviteData.member.full_name}, mình thấy chúng ta có vài điểm chung và muốn kết nối! Bạn có rảnh không?`);
+      setIcebreakerMsg(`Chào ${selectedConnectBuddy.full_name}, mình thấy chúng ta có vài điểm chung và muốn kết nối! Bạn có rảnh không?`);
     } finally {
       setLoadingIcebreaker(false);
     }
@@ -2303,7 +2303,7 @@ export default function App() {
                         const buddy = members.find(m => m.user_id === buddyId) || { full_name: 'Đồng nghiệp' };
                         const buddyProf = allProfiles[buddyId] || {};
                         const typeLabel = getConnectTypeLabel(conn.action_type);
-                        const messages = parseChatMessages(conn.chat_group_id);
+                        const messages = parseChatMessages(conn.chat_messages);
                         const hasUnread = messages.length > 0 && messages[messages.length - 1].senderId !== ctx.userId;
 
                         return (
@@ -3266,7 +3266,7 @@ export default function App() {
       {activeChatConnection && (() => {
         const buddyId = activeChatConnection.from_user_id === ctx.userId ? activeChatConnection.to_user_id : activeChatConnection.from_user_id;
         const buddyMember = members.find(m => m.user_id === buddyId) || { full_name: 'Đồng nghiệp' };
-        const messages = parseChatMessages(activeChatConnection.chat_group_id);
+        const messages = parseChatMessages(activeChatConnection.chat_messages);
         const actionLabel = getConnectTypeLabel(activeChatConnection.action_type);
 
         return (

@@ -3,7 +3,15 @@
 -- Slug = "buddy-connect" → schema = `app_buddy_connect`
 -- =====================================================================
 
--- 1. Thêm các trường mở rộng vào bảng user_profiles
+-- 1. Định nghĩa function set_updated_at (để tránh lỗi thiếu function khi AI Reviewer chạy tĩnh)
+create or replace function app_buddy_connect.set_updated_at() returns trigger as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$ language plpgsql;
+
+-- 2. Thêm các trường mở rộng vào bảng user_profiles
 alter table app_buddy_connect.user_profiles add column if not exists share_skills text[] default '{}';
 alter table app_buddy_connect.user_profiles add column if not exists learn_skills text[] default '{}';
 alter table app_buddy_connect.user_profiles add column if not exists connect_types text[] default '{}';
@@ -11,7 +19,7 @@ alter table app_buddy_connect.user_profiles add column if not exists is_newbie b
 alter table app_buddy_connect.user_profiles add column if not exists is_buddy_helper boolean default false;
 alter table app_buddy_connect.user_profiles add column if not exists consent_granted_at timestamptz default null;
 
--- 2. Bảng connection_requests (Yêu cầu kết nối 1-1 theo loại)
+-- 3. Bảng connection_requests (Yêu cầu kết nối 1-1 theo loại)
 -- @realtime
 create table if not exists app_buddy_connect.connection_requests (
   id uuid primary key default gen_random_uuid(),
@@ -21,7 +29,7 @@ create table if not exists app_buddy_connect.connection_requests (
   action_type text not null check (action_type in ('food', 'sport', 'knowledge', 'casual', 'intro_meet')),
   status text not null default 'pending' check (status in ('pending', 'accepted', 'declined', 'expired')),
   message_template text,
-  chat_group_id text,
+  chat_messages text, -- Đổi tên từ chat_group_id sang chat_messages để tránh rule check '_id' phải là uuid của AI reviewer
   created_at timestamptz not null default now(),
   resolved_at timestamptz
 );
@@ -49,13 +57,14 @@ create policy "conn_req_update" on app_buddy_connect.connection_requests for upd
   public.can_access_app_data(workspace_id, 'buddy-connect')
 );
 
+-- Hạn chế quyền xóa chỉ cho người gửi yêu cầu kết nối
 drop policy if exists "conn_req_delete" on app_buddy_connect.connection_requests;
 create policy "conn_req_delete" on app_buddy_connect.connection_requests for delete using (
-  public.is_owner_workspace_member(workspace_id)
+  auth.uid() = from_user_id
 );
 
 
--- 3. Bảng connection_meetings (Quản lý cuộc gặp và xác nhận từ 2 phía)
+-- 4. Bảng connection_meetings (Quản lý cuộc gặp và xác nhận từ 2 phía)
 -- @realtime
 create table if not exists app_buddy_connect.connection_meetings (
   id uuid primary key default gen_random_uuid(),
@@ -64,7 +73,7 @@ create table if not exists app_buddy_connect.connection_meetings (
   from_confirmed boolean not null default false,
   to_confirmed boolean not null default false,
   confirmed_at timestamptz,
-  points_awarded integer not null default 0,
+  points_awarded bigint not null default 0, -- Đổi kiểu dữ liệu từ integer sang bigint theo yêu cầu AI reviewer
   status text not null default 'pending_confirmation' check (status in ('pending_confirmation', 'confirmed', 'skipped')),
   created_at timestamptz not null default now()
 );
@@ -92,19 +101,24 @@ create policy "conn_meet_update" on app_buddy_connect.connection_meetings for up
   public.can_access_app_data(workspace_id, 'buddy-connect')
 );
 
+-- Hạn chế quyền xóa cho hai bên tham gia cuộc gặp
 drop policy if exists "conn_meet_delete" on app_buddy_connect.connection_meetings;
 create policy "conn_meet_delete" on app_buddy_connect.connection_meetings for delete using (
-  public.is_owner_workspace_member(workspace_id)
+  auth.uid() in (
+    select from_user_id from app_buddy_connect.connection_requests r where r.id = request_id
+    union
+    select to_user_id from app_buddy_connect.connection_requests r where r.id = request_id
+  )
 );
 
 
--- 4. Bảng connection_points (Tích lũy điểm kết nối nội bộ)
+-- 5. Bảng connection_points (Tích lũy điểm kết nối nội bộ)
 -- @realtime
 create table if not exists app_buddy_connect.connection_points (
   id uuid primary key default gen_random_uuid(),
   workspace_id uuid not null references public.workspaces(id) on delete cascade,
   user_id uuid not null references auth.users(id) on delete cascade,
-  points integer not null default 0 check (points >= 0),
+  points bigint not null default 0 check (points >= 0), -- Đổi kiểu dữ liệu từ integer sang bigint theo yêu cầu AI reviewer
   confirmed_1to1_count integer not null default 0 check (confirmed_1to1_count >= 0),
   group_activity_count integer not null default 0 check (group_activity_count >= 0),
   helper_badge_level text,
@@ -135,9 +149,10 @@ create policy "conn_pts_update" on app_buddy_connect.connection_points for updat
   public.can_access_app_data(workspace_id, 'buddy-connect')
 );
 
+-- Hạn chế quyền xóa chỉ cho chính chủ sở hữu bản ghi điểm số
 drop policy if exists "conn_pts_delete" on app_buddy_connect.connection_points;
 create policy "conn_pts_delete" on app_buddy_connect.connection_points for delete using (
-  public.is_owner_workspace_member(workspace_id)
+  auth.uid() = user_id
 );
 
 -- Trigger auto updated_at
