@@ -418,7 +418,12 @@ export default function App() {
   const [showSharingModal, setShowSharingModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
-  const [inviteSelectedUserId, setInviteSelectedUserId] = useState('');
+  const [inviteSelectedUserIds, setInviteSelectedUserIds] = useState([]);
+  const [inviteSearchQuery, setInviteSearchQuery] = useState('');
+  const [inviteType, setInviteType] = useState('food');
+  const [inviteTime, setInviteTime] = useState('');
+  const [inviteLocation, setInviteLocation] = useState('');
+  const [inviteMessage, setInviteMessage] = useState('');
 
   const [shareCodeInput, setShareCodeInput] = useState('');
   const [radarPage, setRadarPage] = useState(1);
@@ -803,6 +808,121 @@ export default function App() {
       case 'casual': return 'Tán gẫu 💬';
       case 'intro_meet': return 'Làm quen 🤝';
       default: return 'Kết nối';
+    }
+  };
+
+  const getConnectTypeTemplate = (type) => {
+    switch (type) {
+      case 'food': return 'Chào bạn, mình muốn rủ bạn ăn trưa/cafe để làm quen và trao đổi thêm nhé!';
+      case 'sport': return 'Chào bạn, mình thấy bạn cũng thích thể thao, hôm nào chúng ta giao lưu nhé!';
+      case 'knowledge': return 'Chào bạn, mình rất ấn tượng với profile của bạn và muốn kết nối trao đổi tri thức!';
+      case 'casual': return 'Chào bạn, mình muốn kết nối làm quen trò chuyện nhẹ nhàng lúc rảnh.';
+      default: return 'Chào bạn, mình muốn rủ bạn kết nối giao lưu!';
+    }
+  };
+
+  const parseMessageTemplate = (template) => {
+    if (!template) return { text: '', time: '', location: '' };
+    if (template.trim().startsWith('{')) {
+      try {
+        const parsed = JSON.parse(template);
+        return {
+          text: parsed.text || '',
+          time: parsed.time ? new Date(parsed.time).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' }) : '',
+          location: parsed.location || ''
+        };
+      } catch (e) {
+        // Fallback
+      }
+    }
+    return { text: template, time: '', location: '' };
+  };
+
+  const handleSendGroupInvitation = async () => {
+    if (inviteSelectedUserIds.length === 0) {
+      return dialog.error('Thiếu thông tin', 'Vui lòng chọn ít nhất một đồng nghiệp để gửi lời mời.');
+    }
+    if (!inviteTime) {
+      return dialog.error('Thiếu thông tin', 'Vui lòng chọn thời gian hẹn.');
+    }
+    if (!inviteLocation.trim()) {
+      return dialog.error('Thiếu thông tin', 'Vui lòng nhập địa điểm hẹn.');
+    }
+
+    try {
+      bridge.haptic('medium');
+      const activeWs = scope.workspaceId;
+      if (!activeWs) return;
+
+      const messageTemplateJson = JSON.stringify({
+        text: inviteMessage || getConnectTypeTemplate(inviteType),
+        time: inviteTime,
+        location: inviteLocation.trim()
+      });
+
+      let successCount = 0;
+      let existingCount = 0;
+
+      for (const buddyId of inviteSelectedUserIds) {
+        const { data: existing } = await db
+          .from('connection_requests')
+          .select('*')
+          .eq('workspace_id', activeWs)
+          .eq('from_user_id', ctx.userId)
+          .eq('to_user_id', buddyId)
+          .eq('action_type', inviteType)
+          .eq('status', 'pending')
+          .maybeSingle();
+
+        if (existing) {
+          existingCount++;
+          continue;
+        }
+
+        const chatGroupId = JSON.stringify([]);
+        const { error: insertErr } = await db
+          .from('connection_requests')
+          .insert({
+            workspace_id: activeWs,
+            from_user_id: ctx.userId,
+            to_user_id: buddyId,
+            action_type: inviteType,
+            status: 'pending',
+            message_template: messageTemplateJson,
+            chat_messages: chatGroupId,
+            created_at: new Date().toISOString()
+          });
+
+        if (!insertErr) {
+          successCount++;
+          try {
+            const typeLabel = getConnectTypeLabel(inviteType);
+            await mushyApi.push({
+              workspaceId: activeWs,
+              appSlug: 'buddy-connect',
+              userIds: [buddyId],
+              title: '⚡ Lời mời kết nối mới!',
+              body: `${ctx.userFullName || 'Một đồng nghiệp'} đã gửi lời mời kết nối "${typeLabel}" tới bạn. Mở app để xem ngay!`,
+            });
+          } catch (pushErr) {
+            console.warn('Lỗi push notification:', pushErr);
+          }
+        }
+      }
+
+      if (successCount > 0) {
+        await dialog.success('Đã gửi yêu cầu!', `Đã gửi thành công ${successCount} lời mời kết nối.`);
+        setShowInviteModal(false);
+        setInviteSelectedUserIds([]);
+        setInviteTime('');
+        setInviteLocation('');
+        setInviteMessage('');
+        loadConnectionData();
+      } else if (existingCount > 0) {
+        dialog.error('Yêu cầu đã tồn tại', 'Tất cả các đồng nghiệp được chọn đã có lời mời chờ phản hồi từ bạn.');
+      }
+    } catch (e) {
+      dialog.error('Lỗi gửi yêu cầu', e.message);
     }
   };
 
@@ -1946,8 +2066,13 @@ export default function App() {
                             fontWeight: '700'
                           }}
                           onClick={() => {
-                            setSelectedConnectBuddy(newbiePrimaryBuddy.member);
-                            setShowConnectSheet(true);
+                            bridge.haptic('light');
+                            setInviteSelectedUserIds([newbiePrimaryBuddy.member.user_id]);
+                            setInviteType('intro_meet');
+                            setInviteTime('');
+                            setInviteLocation('');
+                            setInviteMessage(getConnectTypeTemplate('intro_meet'));
+                            setShowInviteModal(true);
                           }}
                         >
                           🤝 Kết nối nhanh
@@ -1981,8 +2106,12 @@ export default function App() {
                             style={{ cursor: 'pointer' }}
                             onClick={() => {
                               bridge.haptic('light');
-                              setSelectedConnectBuddy(member);
-                              setShowConnectSheet(true);
+                              setInviteSelectedUserIds([member.user_id]);
+                              setInviteType('food');
+                              setInviteTime('');
+                              setInviteLocation('');
+                              setInviteMessage(getConnectTypeTemplate('food'));
+                              setShowInviteModal(true);
                             }}
                           >
                             <div className="buddy-card-main">
@@ -2037,8 +2166,12 @@ export default function App() {
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         bridge.haptic('light');
-                                        setSelectedConnectBuddy(member);
-                                        setShowConnectSheet(true);
+                                        setInviteSelectedUserIds([member.user_id]);
+                                        setInviteType('food');
+                                        setInviteTime('');
+                                        setInviteLocation('');
+                                        setInviteMessage(getConnectTypeTemplate('food'));
+                                        setShowInviteModal(true);
                                       }}
                                       title={`Rủ nhanh ${member.full_name} cùng chơi ${tag.name}`}
                                     >
@@ -2083,8 +2216,12 @@ export default function App() {
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       bridge.haptic('light');
-                                      setSelectedConnectBuddy(member);
-                                      setShowConnectSheet(true);
+                                      setInviteSelectedUserIds([member.user_id]);
+                                      setInviteType('food');
+                                      setInviteTime('');
+                                      setInviteLocation('');
+                                      setInviteMessage(getConnectTypeTemplate('food'));
+                                      setShowInviteModal(true);
                                     }}
                                   >
                                     🤝 Gửi lời mời
@@ -2241,6 +2378,11 @@ export default function App() {
                 }}
                 onClick={() => {
                   bridge.haptic('light');
+                  setInviteSelectedUserIds([]);
+                  setInviteType('food');
+                  setInviteTime('');
+                  setInviteLocation('');
+                  setInviteMessage(getConnectTypeTemplate('food'));
                   setShowInviteModal(true);
                 }}
               >
@@ -2489,6 +2631,28 @@ export default function App() {
                                 <div style={{ fontSize: '10.5px', color: 'var(--muted)', marginTop: '2px' }}>
                                   Hình thức: <strong>{typeLabel}</strong> · Trạng thái: <span style={{ color: '#F59E0B', fontWeight: '700' }}>Chờ phản hồi</span>
                                 </div>
+                                {(() => {
+                                  const { text, time, location } = parseMessageTemplate(req.message_template);
+                                  return (
+                                    <div style={{ marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                      {time && (
+                                        <div style={{ fontSize: '10.5px', color: '#4B5563', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                          <span>📅</span> <span>Hẹn lúc: <strong>{time}</strong></span>
+                                        </div>
+                                      )}
+                                      {location && (
+                                        <div style={{ fontSize: '10.5px', color: '#4B5563', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                          <span>📍</span> <span>Tại: <strong>{location}</strong></span>
+                                        </div>
+                                      )}
+                                      {text && (
+                                        <p style={{ margin: '4px 0 0', fontSize: '11px', color: 'var(--muted)', fontStyle: 'italic', background: 'rgba(0,0,0,0.01)', padding: '4px 6px', borderRadius: '6px' }}>
+                                          💬 "{text}"
+                                        </p>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
                               </div>
                               <span style={{ fontSize: '10px', color: 'var(--muted)', flexShrink: 0 }}>
                                 {new Date(req.created_at).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}
@@ -2681,20 +2845,43 @@ export default function App() {
                             </span>
                           </div>
 
-                          {req.message_template && (
-                            <div style={{
-                              marginTop: 10,
-                              padding: '10px 12px',
-                              background: 'rgba(15,15,18,0.02)',
-                              borderRadius: 12,
-                              fontSize: 12.5,
-                              color: 'var(--ink)',
-                              border: '1px solid var(--hairline)',
-                              lineHeight: 1.4
-                            }}>
-                              💬 "{req.message_template}"
-                            </div>
-                          )}
+                          {req.message_template && (() => {
+                            const { text, time, location } = parseMessageTemplate(req.message_template);
+                            return (
+                              <div style={{
+                                marginTop: 10,
+                                padding: '10px 12px',
+                                background: 'rgba(15,15,18,0.02)',
+                                borderRadius: 12,
+                                fontSize: 12.5,
+                                color: 'var(--ink)',
+                                border: '1px solid var(--hairline)',
+                                lineHeight: 1.4,
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '4px'
+                              }}>
+                                {time && (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#1F2937' }}>
+                                    <span style={{ fontSize: '13px' }}>📅</span>
+                                    <span>Hẹn lúc: <strong>{time}</strong></span>
+                                  </div>
+                                )}
+                                {location && (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#1F2937' }}>
+                                    <span style={{ fontSize: '13px' }}>📍</span>
+                                    <span>Tại: <strong>{location}</strong></span>
+                                  </div>
+                                )}
+                                {text && (
+                                  <div style={{ display: 'flex', gap: '6px', color: 'var(--muted)', fontStyle: 'italic', marginTop: time || location ? '4px' : '0' }}>
+                                    <span>💬</span>
+                                    <span>"{text}"</span>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
 
                           <div style={{ display: 'flex', gap: 10, marginTop: 14, borderTop: '1px solid var(--hairline)', paddingTop: 12 }}>
                             <button
@@ -2926,15 +3113,15 @@ export default function App() {
 
       {/* DIRECT INVITATION MODAL */}
       {showInviteModal && (
-        <div className="modal-scrim dialog-scrim animated-fade-in" onClick={() => { setShowInviteModal(false); setInviteSelectedUserId(''); }}>
-          <div className="modal-card dialog-card form-slide-down" style={{ maxWidth: 420, textAlign: 'left', display: 'flex', flexDirection: 'column', maxHeight: '90dvh' }} onClick={(e) => e.stopPropagation()}>
+        <div className="modal-scrim dialog-scrim animated-fade-in" onClick={() => { setShowInviteModal(false); setInviteSelectedUserIds([]); setInviteSearchQuery(''); setInviteTime(''); setInviteLocation(''); setInviteMessage(''); }}>
+          <div className="modal-card dialog-card form-slide-down" style={{ maxWidth: 440, textAlign: 'left', display: 'flex', flexDirection: 'column', maxHeight: '95dvh' }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, borderBottom: '1px solid var(--hairline)', paddingBottom: 10 }}>
               <h3 className="dialog-title" style={{ fontSize: 16, display: 'flex', alignItems: 'center', gap: 8, margin: 0, fontWeight: 800 }}>
                 <span>🤝</span> Gửi lời mời kết nối mới
               </h3>
               <button 
                 type="button"
-                onClick={() => { setShowInviteModal(false); setInviteSelectedUserId(''); }}
+                onClick={() => { setShowInviteModal(false); setInviteSelectedUserIds([]); setInviteSearchQuery(''); setInviteTime(''); setInviteLocation(''); setInviteMessage(''); }}
                 style={{ border: 'none', background: 'transparent', fontSize: 24, cursor: 'pointer', color: 'var(--muted)', padding: '0 4px', lineHeight: 1 }}
               >
                 ×
@@ -2942,28 +3129,166 @@ export default function App() {
             </div>
 
             <div style={{ overflowY: 'auto', flex: 1, paddingRight: 4, paddingBottom: 10 }}>
-              <p className="mushy-section-sub" style={{ margin: '0 0 16px', fontSize: '12.5px', color: 'var(--muted)' }}>
-                Chọn một đồng nghiệp trong workspace để bắt đầu gửi lời mời kết nối.
-              </p>
+              {/* Selected members chips */}
+              <div style={{ marginBottom: 12 }}>
+                <label className="mushy-label" style={{ marginBottom: 6, display: 'block', fontSize: '13px', fontWeight: '700' }}>
+                  Đồng nghiệp nhận lời mời ({inviteSelectedUserIds.length})
+                </label>
+                
+                {inviteSelectedUserIds.length > 0 && (
+                  <div className="chips-container" style={{ maxHeight: '80px', overflowY: 'auto', gap: '6px', marginBottom: '8px', padding: '4px', border: '1px solid rgba(0,0,0,0.04)', borderRadius: '8px', background: '#F8FAFC' }}>
+                    {inviteSelectedUserIds.map(uid => {
+                      const m = members.find(item => item.user_id === uid);
+                      if (!m) return null;
+                      return (
+                        <span 
+                          key={uid} 
+                          className="selectable-chip selectable-chip--selected"
+                          style={{ padding: '3px 8px', fontSize: '11px', borderRadius: '8px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                          onClick={() => setInviteSelectedUserIds(prev => prev.filter(id => id !== uid))}
+                        >
+                          {m.full_name} ✕
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
 
-              <div style={{ marginBottom: 20 }}>
-                <label className="mushy-label" style={{ marginBottom: 8, display: 'block', fontSize: '13px', fontWeight: '700' }}>Đồng nghiệp</label>
-                <Select
-                  value={inviteSelectedUserId}
-                  onChange={(val) => setInviteSelectedUserId(val)}
-                  placeholder="— Chọn đồng nghiệp để kết nối —"
-                  options={members.map(m => {
-                    const prof = allProfiles[m.user_id] || {};
-                    const deptText = prof.department ? ` (${prof.department})` : '';
-                    return {
-                      value: m.user_id,
-                      label: `${m.full_name}${deptText}`
-                    };
+                <input
+                  type="text"
+                  className="mushy-input"
+                  placeholder="🔍 Tìm tên đồng nghiệp..."
+                  value={inviteSearchQuery}
+                  onChange={(e) => setInviteSearchQuery(e.target.value)}
+                  style={{ marginBottom: '8px', minHeight: '36px', height: '36px', fontSize: '12.5px', padding: '0 12px' }}
+                />
+
+                <div style={{ 
+                  maxHeight: '120px', 
+                  overflowY: 'auto', 
+                  border: '1.5px solid var(--hairline)', 
+                  borderRadius: '12px', 
+                  padding: '8px', 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  gap: '6px',
+                  background: '#F8FAFC'
+                }}>
+                  {members.filter(m => m.full_name.toLowerCase().includes(inviteSearchQuery.toLowerCase())).map(m => {
+                    const isChecked = inviteSelectedUserIds.includes(m.user_id);
+                    return (
+                      <label 
+                        key={m.user_id} 
+                        style={{ 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          gap: '8px', 
+                          fontSize: '12.5px', 
+                          cursor: 'pointer',
+                          padding: '4px 6px',
+                          borderRadius: '6px',
+                          background: isChecked ? 'rgba(230, 57, 70, 0.04)' : 'transparent',
+                          transition: 'background 0.2s'
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => {
+                            if (isChecked) {
+                              setInviteSelectedUserIds(prev => prev.filter(uid => uid !== m.user_id));
+                            } else {
+                              setInviteSelectedUserIds(prev => [...prev, m.user_id]);
+                            }
+                          }}
+                          style={{ accentColor: 'var(--brand)', cursor: 'pointer' }}
+                        />
+                        <span>{m.full_name}</span>
+                      </label>
+                    );
                   })}
+                </div>
+              </div>
+
+              {/* Connect Type */}
+              <div style={{ marginBottom: 14 }}>
+                <label className="mushy-label" style={{ marginBottom: 6, display: 'block', fontSize: '13px', fontWeight: '700' }}>Hình thức kết nối</label>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px' }}>
+                  {[
+                    { code: 'food', label: '🍴 Ăn trưa' },
+                    { code: 'sport', label: '⚽ Thể thao' },
+                    { code: 'knowledge', label: '📖 Tri thức' },
+                    { code: 'casual', label: '💬 Tán gẫu' }
+                  ].map(type => (
+                    <button
+                      key={type.code}
+                      type="button"
+                      onClick={() => {
+                        setInviteType(type.code);
+                        const currentDefaultMsg = getConnectTypeTemplate(inviteType);
+                        if (!inviteMessage || inviteMessage === currentDefaultMsg) {
+                          setInviteMessage(getConnectTypeTemplate(type.code));
+                        }
+                      }}
+                      style={{
+                        padding: '8px 2px',
+                        fontSize: '11px',
+                        fontWeight: '800',
+                        borderRadius: '10px',
+                        border: inviteType === type.code ? '1.5px solid var(--brand)' : '1px solid var(--hairline)',
+                        background: inviteType === type.code ? 'var(--brand-soft)' : '#fff',
+                        color: inviteType === type.code ? 'var(--brand)' : 'var(--ink)',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s'
+                      }}
+                    >
+                      {type.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Time & Location */}
+              <div style={{ display: 'flex', gap: '10px', marginBottom: 14 }}>
+                <div style={{ flex: 1 }}>
+                  <label className="mushy-label" style={{ marginBottom: 6, display: 'block', fontSize: '12px', fontWeight: '700' }}>⏰ Thời gian hẹn</label>
+                  <input
+                    type="datetime-local"
+                    className="mushy-input"
+                    value={inviteTime}
+                    onChange={(e) => setInviteTime(e.target.value)}
+                    required
+                    style={{ minHeight: '36px', height: '36px', fontSize: '12.5px', padding: '0 8px' }}
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label className="mushy-label" style={{ marginBottom: 6, display: 'block', fontSize: '12px', fontWeight: '700' }}>📍 Địa điểm</label>
+                  <input
+                    type="text"
+                    className="mushy-input"
+                    placeholder="Vd: Keangnam, Lotte..."
+                    value={inviteLocation}
+                    onChange={(e) => setInviteLocation(e.target.value)}
+                    required
+                    style={{ minHeight: '36px', height: '36px', fontSize: '12.5px', padding: '0 8px' }}
+                  />
+                </div>
+              </div>
+
+              {/* Message text */}
+              <div style={{ marginBottom: 16 }}>
+                <label className="mushy-label" style={{ marginBottom: 6, display: 'block', fontSize: '12.5px', fontWeight: '700' }}>💬 Lời nhắn</label>
+                <textarea
+                  className="mushy-input"
+                  rows={2}
+                  placeholder="Nhập lời nhắn rủ..."
+                  value={inviteMessage}
+                  onChange={(e) => setInviteMessage(e.target.value)}
+                  style={{ fontSize: '12.5px', padding: '8px 10px', minHeight: '52px', resize: 'vertical' }}
                 />
               </div>
 
-              <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
+              <div style={{ display: 'flex', gap: '10px', marginTop: '20px', borderTop: '1px solid var(--hairline)', paddingTop: '12px' }}>
                 <button
                   type="button"
                   className="mushy-btn"
@@ -2979,7 +3304,11 @@ export default function App() {
                   }}
                   onClick={() => {
                     setShowInviteModal(false);
-                    setInviteSelectedUserId('');
+                    setInviteSelectedUserIds([]);
+                    setInviteSearchQuery('');
+                    setInviteTime('');
+                    setInviteLocation('');
+                    setInviteMessage('');
                   }}
                 >
                   Hủy
@@ -2997,18 +3326,10 @@ export default function App() {
                     borderColor: 'var(--brand)',
                     color: '#fff'
                   }}
-                  disabled={!inviteSelectedUserId}
-                  onClick={() => {
-                    const targetBuddy = members.find(m => m.user_id === inviteSelectedUserId);
-                    if (targetBuddy) {
-                      setShowInviteModal(false);
-                      setInviteSelectedUserId('');
-                      setSelectedConnectBuddy(targetBuddy);
-                      setShowConnectSheet(true);
-                    }
-                  }}
+                  disabled={inviteSelectedUserIds.length === 0 || !inviteTime || !inviteLocation.trim()}
+                  onClick={handleSendGroupInvitation}
                 >
-                  Tiếp tục
+                  Gửi lời mời
                 </button>
               </div>
             </div>
