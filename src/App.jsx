@@ -2062,6 +2062,34 @@ export default function App() {
                                     🎯 {profile.career_goals.slice(0, 2).join(' · ')}
                                   </p>
                                 )}
+
+                                {/* Button Gửi lời mời */}
+                                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '12px' }}>
+                                  <button
+                                    type="button"
+                                    className="mushy-btn"
+                                    style={{
+                                      fontSize: '11.5px',
+                                      fontWeight: '800',
+                                      padding: '4px 14px',
+                                      background: 'rgba(230, 57, 70, 0.08)',
+                                      color: 'var(--brand)',
+                                      border: '1px solid rgba(230, 57, 70, 0.15)',
+                                      borderRadius: '12px',
+                                      minHeight: '28px',
+                                      height: '28px',
+                                      cursor: 'pointer'
+                                    }}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      bridge.haptic('light');
+                                      setSelectedConnectBuddy(member);
+                                      setShowConnectSheet(true);
+                                    }}
+                                  >
+                                    🤝 Gửi lời mời
+                                  </button>
+                                </div>
                               </div>
                             </div>
                           </section>
