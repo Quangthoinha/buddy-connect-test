@@ -3300,6 +3300,166 @@ export default function App() {
                   </div>
                 </div>
 
+                {/* SKILLS */}
+                <div style={{ borderTop: '1px solid var(--hairline)', paddingTop: 18, marginTop: 18 }}>
+                  <label className="mushy-label">Kỹ năng chuyên môn (Skills)</label>
+                  <p style={{ fontSize: 11.5, color: 'var(--muted)', margin: '2px 0 8px' }}>Chọn các kỹ năng bạn có — dùng để match với người cùng chuyên môn</p>
+                  <div className="chips-container">
+                    {['JavaScript', 'Python', 'React', 'Node.js', 'Project Management', 'Design', 'Marketing', 'Sales', 'Data Analysis', 'Public Speaking'].map(skill => {
+                      const isSelected = mySkills.includes(skill);
+                      return (
+                        <span
+                          key={skill}
+                          className={`selectable-chip ${isSelected ? 'selectable-chip--selected' : ''}`}
+                          style={isSelected ? {} : { background: 'rgba(6,182,212,0.06)', borderColor: 'rgba(6,182,212,0.2)', color: '#06B6D4' }}
+                          onClick={() => {
+                            bridge.haptic('light');
+                            setMySkills(prev => isSelected ? prev.filter(s => s !== skill) : [...prev, skill]);
+                          }}
+                        >
+                          🛠 {skill}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* CAREER GOALS */}
+                <div style={{ borderTop: '1px solid var(--hairline)', paddingTop: 18, marginTop: 18 }}>
+                  <label className="mushy-label">Mục tiêu nghề nghiệp (Career Goals)</label>
+                  <p style={{ fontSize: 11.5, color: 'var(--muted)', margin: '2px 0 8px' }}>Chọn mục tiêu bạn đang hướng tới — giúp kết nối với người cùng chí hướng</p>
+                  <div className="chips-container">
+                    {['Tìm mentor', 'Trở thành mentor', 'Học công nghệ mới', 'Mở rộng network', 'Luyện kỹ năng mềm', 'Chuyển hướng nghề nghiệp'].map(goal => {
+                      const isSelected = myGoals.includes(goal);
+                      return (
+                        <span
+                          key={goal}
+                          className={`selectable-chip ${isSelected ? 'selectable-chip--selected' : ''}`}
+                          style={isSelected ? {} : { background: 'rgba(168,85,247,0.06)', borderColor: 'rgba(168,85,247,0.2)', color: '#A855F7' }}
+                          onClick={() => {
+                            bridge.haptic('light');
+                            setMyGoals(prev => isSelected ? prev.filter(g => g !== goal) : [...prev, goal]);
+                          }}
+                        >
+                          🎯 {goal}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* USER ROLES */}
+                <div style={{ borderTop: '1px solid var(--hairline)', paddingTop: 18, marginTop: 18 }}>
+                  <label className="mushy-label">Vai trò thành viên (User Roles)</label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8 }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 13 }}>
+                      <input
+                        type="checkbox"
+                        style={{ accentColor: 'var(--brand)' }}
+                        checked={!!myProfile.is_newbie}
+                        onChange={(e) => setMyProfile(prev => ({ ...prev, is_newbie: e.target.checked }))}
+                      />
+                      <span>Tôi là nhân viên mới (Intern / Onboard tuần đầu) 👶</span>
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 13 }}>
+                      <input
+                        type="checkbox"
+                        style={{ accentColor: 'var(--brand)' }}
+                        checked={!!myProfile.is_buddy_helper}
+                        onChange={(e) => setMyProfile(prev => ({ ...prev, is_buddy_helper: e.target.checked }))}
+                      />
+                      <span>Tôi sẵn sàng hỗ trợ người mới làm quen môi trường 🤝</span>
+                    </label>
+                  </div>
+                </div>
+
+                {/* CONNECT TYPES */}
+                <div style={{ borderTop: '1px solid var(--hairline)', paddingTop: 18, marginTop: 18 }}>
+                  <label className="mushy-label">Ưu tiên hình thức kết nối (Connect Types)</label>
+                  <p style={{ fontSize: 11.5, color: 'var(--muted)', margin: '2px 0 8px' }}>Chọn các hoạt động bạn muốn giao lưu cùng đồng nghiệp</p>
+                  <div className="chips-container">
+                    {[
+                      { code: 'food', label: '🍴 Ăn uống / Cafe' },
+                      { code: 'sport', label: '⚽ Thể thao' },
+                      { code: 'knowledge', label: '📖 Tri thức' },
+                      { code: 'casual', label: '💬 Tán gẫu' }
+                    ].map(ct => {
+                      const isSelected = (myProfile.connect_types || []).includes(ct.code);
+                      return (
+                        <span
+                          key={ct.code}
+                          className={`selectable-chip ${isSelected ? 'selectable-chip--selected' : ''}`}
+                          onClick={() => {
+                            bridge.haptic('light');
+                            setMyProfile(prev => {
+                              const current = prev.connect_types || [];
+                              const next = isSelected ? current.filter(x => x !== ct.code) : [...current, ct.code];
+                              return { ...prev, connect_types: next };
+                            });
+                          }}
+                        >
+                          {ct.label}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* KNOWLEDGE SHARING */}
+                <div style={{ borderTop: '1px solid var(--hairline)', paddingTop: 18, marginTop: 18 }}>
+                  <label className="mushy-label">Kỹ năng tôi có thể chia sẻ (Share Skills)</label>
+                  <p style={{ fontSize: 11.5, color: 'var(--muted)', margin: '2px 0 8px' }}>Chọn kỹ năng bạn tự tin hướng dẫn, trao đổi cho đồng nghiệp</p>
+                  <div className="chips-container">
+                    {['JavaScript', 'Python', 'React', 'Node.js', 'Project Management', 'Design', 'Marketing', 'Sales', 'Data Analysis', 'Public Speaking'].map(skill => {
+                      const isSelected = (myProfile.share_skills || []).includes(skill);
+                      return (
+                        <span
+                          key={skill}
+                          className={`selectable-chip ${isSelected ? 'selectable-chip--selected' : ''}`}
+                          style={isSelected ? {} : { background: 'rgba(16,185,129,0.06)', borderColor: 'rgba(16,185,129,0.2)', color: '#10B981' }}
+                          onClick={() => {
+                            bridge.haptic('light');
+                            setMyProfile(prev => {
+                              const current = prev.share_skills || [];
+                              const next = isSelected ? current.filter(x => x !== skill) : [...current, skill];
+                              return { ...prev, share_skills: next };
+                            });
+                          }}
+                        >
+                          📖 {skill}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div style={{ borderTop: '1px solid var(--hairline)', paddingTop: 18, marginTop: 18 }}>
+                  <label className="mushy-label">Kỹ năng tôi muốn học hỏi (Learn Skills)</label>
+                  <p style={{ fontSize: 11.5, color: 'var(--muted)', margin: '2px 0 8px' }}>Chọn kỹ năng bạn đang muốn tìm hiểu hoặc cải thiện</p>
+                  <div className="chips-container">
+                    {['JavaScript', 'Python', 'React', 'Node.js', 'Project Management', 'Design', 'Marketing', 'Sales', 'Data Analysis', 'Public Speaking'].map(skill => {
+                      const isSelected = (myProfile.learn_skills || []).includes(skill);
+                      return (
+                        <span
+                          key={skill}
+                          className={`selectable-chip ${isSelected ? 'selectable-chip--selected' : ''}`}
+                          style={isSelected ? {} : { background: 'rgba(245,158,11,0.06)', borderColor: 'rgba(245,158,11,0.2)', color: '#D97706' }}
+                          onClick={() => {
+                            bridge.haptic('light');
+                            setMyProfile(prev => {
+                              const current = prev.learn_skills || [];
+                              const next = isSelected ? current.filter(x => x !== skill) : [...current, skill];
+                              return { ...prev, learn_skills: next };
+                            });
+                          }}
+                        >
+                          🎓 {skill}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 <div style={{ borderTop: '1px solid var(--hairline)', paddingTop: 18, marginTop: 18 }}>
                   <h4 style={{ margin: '0 0 10px', fontSize: 14 }}>Thẻ sở thích (Accordion)</h4>
                   <div className="search-box-container">
