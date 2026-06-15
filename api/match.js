@@ -14,14 +14,17 @@ export default async function handler(req, res) {
   if (!ctx) return res.status(401).json({ error: 'Unauthorized' });
 
   try {
-    const { userId, workspaceId } = req.body;
-    if (!userId || !workspaceId) {
-      return res.status(400).json({ error: 'Missing userId or workspaceId' });
-    }
+    const userId = ctx.userId;
+    const workspaceId = ctx.workspaceId;
+
+    const schemaSlug = config.slug.replace(/-/g, '_');
+    const vercelEnv = process.env.VERCEL_ENV || 'development';
+    const schema = vercelEnv === 'production' ? `app_${schemaSlug}` : `app_${schemaSlug}_dev`;
 
     const client = createClient(SUPABASE_URL, ANON_KEY, {
       global: { headers: { Authorization: `Bearer ${ctx.token}` } },
       auth: { persistSession: false, autoRefreshToken: false },
+      db: { schema: schema }
     });
 
     // 1. Fetch current user profile
@@ -46,7 +49,8 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Failed to fetch profiles' });
     }
 
-    const others = allProfs.filter(p => p.user_id !== userId);
+    // Filter out candidates who have not granted onboarding consent and self
+    const others = allProfs.filter(p => p.user_id !== userId && p.consent_granted_at);
     const profMap = {};
     allProfs.forEach(p => { profMap[p.user_id] = p; });
 

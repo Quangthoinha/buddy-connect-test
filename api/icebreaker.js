@@ -18,20 +18,34 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Missing fromUser or toUser payload' });
     }
 
+    const schemaSlug = config.slug.replace(/-/g, '_');
+    const vercelEnv = process.env.VERCEL_ENV || 'development';
+    const schema = vercelEnv === 'production' ? `app_${schemaSlug}` : `app_${schemaSlug}_dev`;
+
     const client = createClient(SUPABASE_URL, ANON_KEY, {
       global: { headers: { Authorization: `Bearer ${ctx.token}` } },
       auth: { persistSession: false },
+      db: { schema: schema }
     });
 
     // 1. Quota Check
     const { data: quota, error: quotaErr } = await client
       .from('icebreaker_quotas')
-      .select('used_count, max_count')
+      .select('used_count, max_count, last_reset')
       .eq('user_id', ctx.userId)
       .eq('workspace_id', ctx.workspaceId)
-      .single();
+      .maybeSingle();
 
-    if (quota && quota.used_count >= quota.max_count) {
+    let isNewDay = false;
+    if (quota && quota.last_reset) {
+      const resetDate = new Date(quota.last_reset).toDateString();
+      const todayDate = new Date().toDateString();
+      if (resetDate !== todayDate) {
+        isNewDay = true;
+      }
+    }
+
+    if (quota && !isNewDay && quota.used_count >= quota.max_count) {
       return res.status(429).json({ error: 'Quota exceeded for AI Icebreaker (Max 10/day)' });
     }
 
@@ -82,11 +96,20 @@ Mục tiêu: ${(toUser.career_goals || []).join(', ')}
 
     // 5. Update quota
     if (quota) {
-      await client.from('icebreaker_quotas').update({ used_count: quota.used_count + 1 })
+      const nextUsedCount = isNewDay ? 1 : quota.used_count + 1;
+      const updates = { used_count: nextUsedCount };
+      if (isNewDay) {
+        updates.last_reset = new Date().toISOString();
+      }
+      await client.from('icebreaker_quotas').update(updates)
         .eq('user_id', ctx.userId).eq('workspace_id', ctx.workspaceId);
     } else {
       await client.from('icebreaker_quotas').insert({ 
-        user_id: ctx.userId, workspace_id: ctx.workspaceId, used_count: 1, max_count: 10 
+        user_id: ctx.userId, 
+        workspace_id: ctx.workspaceId, 
+        used_count: 1, 
+        max_count: 10,
+        last_reset: new Date().toISOString()
       });
     }
 

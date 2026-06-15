@@ -11,6 +11,7 @@ import {
   useActiveScope,
   useIsAnyWorkspaceAdmin,
   useDefaultScopeInitializer,
+  getActiveScope,
 } from './lib/sharing.js';
 import { mushyApi } from './lib/mushy-api.js';
 import { useDialog } from './components/Dialog.jsx';
@@ -385,7 +386,19 @@ export default function App() {
   const [myTags, setMyTags] = useState([]); // Selected child_codes
   const [mySkills, setMySkills] = useState([]); // Selected skills
   const [myGoals, setMyGoals] = useState([]); // Selected career goals
-  const [consentGranted, setConsentGranted] = useState(false);
+  const [consentGranted, setConsentGranted] = useState(() => {
+    try {
+      const activeWs = getActiveScope()?.workspaceId || getContext()?.workspaceId;
+      const user = getContext()?.userId;
+      if (typeof localStorage !== 'undefined' && user && activeWs) {
+        const stored = localStorage.getItem(`mushy.consentGranted.${activeWs}.${user}`);
+        return stored === 'true';
+      }
+    } catch (e) {
+      // ignore
+    }
+    return false;
+  });
   const [consentCheckbox, setConsentCheckbox] = useState(false); // for consent form checkbox
   
   // Connection states
@@ -523,10 +536,25 @@ export default function App() {
         setMySkills(prof.skills || []);
         setMyGoals(prof.career_goals || []);
         setHasProfile(true);
-        setConsentGranted(!!prof.consent_granted_at);
+        const isConsent = !!prof.consent_granted_at;
+        setConsentGranted(isConsent);
+        try {
+          if (typeof localStorage !== 'undefined') {
+            localStorage.setItem(`mushy.consentGranted.${activeWs}.${ctx.userId}`, isConsent ? 'true' : 'false');
+          }
+        } catch (e) {
+          // ignore
+        }
       } else {
         setHasProfile(false);
         setConsentGranted(false);
+        try {
+          if (typeof localStorage !== 'undefined') {
+            localStorage.setItem(`mushy.consentGranted.${activeWs}.${ctx.userId}`, 'false');
+          }
+        } catch (e) {
+          // ignore
+        }
       }
 
       // 2. Fetch workspace members
@@ -786,6 +814,13 @@ export default function App() {
       }
 
       setConsentGranted(true);
+      try {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem(`mushy.consentGranted.${activeWs}.${ctx.userId}`, 'true');
+        }
+      } catch (e) {
+        // ignore
+      }
       setMyProfile(prev => ({ ...prev, consent_granted_at: consentTime }));
       await dialog.success('Xác nhận thành công!', 'Bạn đã đồng ý với các điều khoản chia sẻ dữ liệu và kết nối.');
       
@@ -817,6 +852,7 @@ export default function App() {
       case 'sport': return 'Chào bạn, mình thấy bạn cũng thích thể thao, hôm nào chúng ta giao lưu nhé!';
       case 'knowledge': return 'Chào bạn, mình rất ấn tượng với profile của bạn và muốn kết nối trao đổi tri thức!';
       case 'casual': return 'Chào bạn, mình muốn kết nối làm quen trò chuyện nhẹ nhàng lúc rảnh.';
+      case 'intro_meet': return 'Chào anh/chị, em là thành viên mới onboard. Em rất mong được kết nối và gặp anh/chị 1 buổi ngắn khoảng 15-30 phút để giao lưu, học hỏi kinh nghiệm làm việc và làm quen văn hóa công ty ạ!';
       default: return 'Chào bạn, mình muốn rủ bạn kết nối giao lưu!';
     }
   };
@@ -1143,11 +1179,12 @@ export default function App() {
         if (bothConfirmed) {
           updates.status = 'confirmed';
           updates.confirmed_at = new Date().toISOString();
-          updates.points_awarded = 10;
+          const pointsToAward = request.action_type === 'intro_meet' ? 15 : 10;
+          updates.points_awarded = pointsToAward;
 
           // Award points to both
-          await awardConnectionPoints(request.from_user_id, 10);
-          await awardConnectionPoints(request.to_user_id, 10);
+          await awardConnectionPoints(request.from_user_id, pointsToAward);
+          await awardConnectionPoints(request.to_user_id, pointsToAward);
         } else {
           updates.status = 'pending_confirmation';
         }
@@ -1163,7 +1200,8 @@ export default function App() {
       if (updateErr) throw updateErr;
 
       if (updates.status === 'confirmed') {
-        await dialog.success('Tuyệt vời! 🎉', 'Cuộc gặp mặt đã được xác nhận từ cả hai phía. Mỗi bạn được cộng 10 điểm kết nối.');
+        const points = request.action_type === 'intro_meet' ? 15 : 10;
+        await dialog.success('Tuyệt vời! 🎉', `Cuộc gặp mặt đã được xác nhận từ cả hai phía. Mỗi bạn được cộng ${points} điểm kết nối.`);
       } else if (isConfirmed === 'confirmed') {
         await dialog.success('Đã xác nhận!', 'Đã ghi nhận xác nhận từ phía bạn. Đang chờ đồng nghiệp xác nhận.');
       } else {
@@ -1294,6 +1332,18 @@ export default function App() {
         matchScore += sharedParents.length * 10;
         if (profile.facility === myProfile.facility) matchScore += 15; // same office bonus
 
+        // D3: Skills overlap matching (+10 per common skill)
+        const commonSkills = (mySkills || []).filter(s => 
+          (profile.skills || []).map(sk => sk.toLowerCase()).includes(s.toLowerCase())
+        );
+        matchScore += commonSkills.length * 10;
+
+        // D4: Career Goals overlap matching (+10 per common goal)
+        const commonGoals = (myGoals || []).filter(g => 
+          (profile.career_goals || []).map(gk => gk.toLowerCase()).includes(g.toLowerCase())
+        );
+        matchScore += commonGoals.length * 10;
+
         // expansion boosters
         if (myProfile.is_newbie && profile.is_buddy_helper) {
           matchScore += 30;
@@ -1343,7 +1393,7 @@ export default function App() {
         // Secondarily sort by higher match score
         return b.matchScore - a.matchScore;
       });
-  }, [members, allProfiles, allUserTags, myTags, myProfile, interactionHistory, fallbackEnabled, hasProfile, searchQuery, helperNewbieCounts]);
+  }, [members, allProfiles, allUserTags, myTags, myProfile, mySkills, myGoals, interactionHistory, fallbackEnabled, hasProfile, searchQuery, helperNewbieCounts]);
 
   const newbiePrimaryBuddy = useMemo(() => {
     if (!hasProfile || !myProfile.is_newbie) return null;
@@ -1360,6 +1410,24 @@ export default function App() {
     if (candidates.length === 0) return null;
     return candidates[0]; // Top matching buddy helper
   }, [rankedCandidates, myProfile, hasProfile, helperNewbieCounts]);
+
+  const hasConnectedPrimaryBuddy = useMemo(() => {
+    if (!newbiePrimaryBuddy) return false;
+    return connectionRequests.some(r => 
+      ((r.from_user_id === ctx.userId && r.to_user_id === newbiePrimaryBuddy.member.user_id) ||
+       (r.from_user_id === newbiePrimaryBuddy.member.user_id && r.to_user_id === ctx.userId))
+    );
+  }, [connectionRequests, newbiePrimaryBuddy, ctx.userId]);
+
+  const hasMetPrimaryBuddy = useMemo(() => {
+    return connectionMeetings.some(m => {
+      if (m.status !== 'confirmed') return false;
+      const req = connectionRequests.find(r => r.id === m.request_id);
+      return req && (req.from_user_id === ctx.userId || req.to_user_id === ctx.userId) && (
+        (newbiePrimaryBuddy && (req.from_user_id === newbiePrimaryBuddy.member.user_id || req.to_user_id === newbiePrimaryBuddy.member.user_id))
+      );
+    });
+  }, [connectionMeetings, connectionRequests, newbiePrimaryBuddy, ctx.userId]);
 
 
 
@@ -1569,6 +1637,108 @@ export default function App() {
     }
   };
 
+  const NewbieRoadmap = () => {
+    if (!myProfile.is_newbie) return null;
+
+    const step1 = true;
+    const step2 = hasProfile && myProfile.department && myProfile.facility && (myTags.length > 0 || mySkills.length > 0);
+    const step3 = hasConnectedPrimaryBuddy;
+    const step4 = hasMetPrimaryBuddy;
+
+    const progressPercentage = [step1, step2, step3, step4].filter(Boolean).length * 25;
+
+    return (
+      <div className="newbie-roadmap-widget" style={{
+        background: 'rgba(255, 255, 255, 0.65)',
+        backdropFilter: 'blur(16px)',
+        border: '1.5px solid rgba(230, 57, 70, 0.1)',
+        borderRadius: '20px',
+        padding: '16px 18px',
+        marginBottom: '16px',
+        boxShadow: '0 8px 24px rgba(0, 0, 0, 0.03)'
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+          <span style={{ fontSize: '13px', fontWeight: '800', color: 'var(--brand)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            🌱 Hành Trình Tuần Đầu Của Bạn ({progressPercentage}%)
+          </span>
+          <span style={{ fontSize: '11px', color: 'var(--muted)', fontWeight: '600' }}>
+            Dành riêng cho Newbie
+          </span>
+        </div>
+
+        <div style={{ width: '100%', height: '6px', background: 'rgba(15, 15, 18, 0.04)', borderRadius: '3px', marginBottom: '16px', overflow: 'hidden' }}>
+          <div style={{ width: `${progressPercentage}%`, height: '100%', background: 'linear-gradient(90deg, var(--brand) 0%, var(--pink) 100%)', borderRadius: '3px', transition: 'width 0.3s ease' }} />
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontSize: '14px', color: step1 ? 'var(--brand)' : 'var(--muted)', opacity: step1 ? 1 : 0.4 }}>
+              {step1 ? '✅' : '⚪'}
+            </span>
+            <span style={{ fontSize: '12.5px', color: step1 ? 'var(--ink)' : 'var(--muted)', fontWeight: step1 ? '600' : 'normal' }}>
+              1. Đồng ý tham gia cộng đồng Connect
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontSize: '14px', color: step2 ? 'var(--brand)' : 'var(--muted)', opacity: step2 ? 1 : 0.4 }}>
+              {step2 ? '✅' : '⚪'}
+            </span>
+            <span style={{ fontSize: '12.5px', color: step2 ? 'var(--ink)' : 'var(--muted)', fontWeight: step2 ? '600' : 'normal', flex: 1, textAlign: 'left' }}>
+              2. Thiết lập hồ sơ & sở thích
+            </span>
+            {!step2 && (
+              <button 
+                type="button" 
+                className="mushy-btn mushy-btn--ghost" 
+                style={{ padding: '2px 8px', fontSize: '10.5px', minHeight: '24px', height: '24px', borderRadius: '8px' }}
+                onClick={() => { bridge.haptic('light'); setShowProfileModal(true); }}
+              >
+                Cài đặt
+              </button>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontSize: '14px', color: step3 ? 'var(--brand)' : 'var(--muted)', opacity: step3 ? 1 : 0.4 }}>
+              {step3 ? '✅' : '⚪'}
+            </span>
+            <span style={{ fontSize: '12.5px', color: step3 ? 'var(--ink)' : 'var(--muted)', fontWeight: step3 ? '600' : 'normal', flex: 1, textAlign: 'left' }}>
+              3. Đặt lịch hẹn làm quen với Primary Buddy
+            </span>
+            {!step3 && newbiePrimaryBuddy && (
+              <button 
+                type="button" 
+                className="mushy-btn" 
+                style={{ padding: '2px 8px', fontSize: '10.5px', minHeight: '24px', height: '24px', borderRadius: '8px', color: '#fff', background: '#D97706', borderColor: '#D97706', fontWeight: '700' }}
+                onClick={() => {
+                  bridge.haptic('light');
+                  setInviteSelectedUserIds([newbiePrimaryBuddy.member.user_id]);
+                  setInviteType('intro_meet');
+                  setInviteTime('');
+                  setInviteLocation('');
+                  setInviteMessage(getConnectTypeTemplate('intro_meet'));
+                  setShowInviteModal(true);
+                }}
+              >
+                Đặt lịch
+              </button>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontSize: '14px', color: step4 ? 'var(--brand)' : 'var(--muted)', opacity: step4 ? 1 : 0.4 }}>
+              {step4 ? '✅' : '⚪'}
+            </span>
+            <span style={{ fontSize: '12.5px', color: step4 ? 'var(--ink)' : 'var(--muted)', fontWeight: step4 ? '600' : 'normal', textAlign: 'left' }}>
+              4. Hoàn thành cuộc gặp & Tích lũy 15 điểm thưởng
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   if (ctx.isMissingContext) {
     return (
       <div style={{
@@ -1621,6 +1791,13 @@ export default function App() {
   }
 
   if (!consentGranted) {
+    if (loading) {
+      return (
+        <div className="mushy-page">
+          <SkeletonScreen />
+        </div>
+      );
+    }
     return (
       <div className="consent-screen animated-fade-in" style={{
         minHeight: '100vh',
@@ -1986,6 +2163,9 @@ export default function App() {
                     )}
                   </div>
 
+                  {/* Onboarding roadmap for Newbies */}
+                  <NewbieRoadmap />
+
                   {/* Primary Buddy section for Newbies */}
                   {newbiePrimaryBuddy && (
                     <section className="mushy-card newbie-buddy-card" style={{
@@ -2059,11 +2239,11 @@ export default function App() {
                             flex: 1,
                             minHeight: '34px',
                             height: '34px',
-                            fontSize: '12px',
+                            fontSize: '12.5px',
                             background: '#D97706',
                             borderColor: '#D97706',
                             color: '#fff',
-                            fontWeight: '700'
+                            fontWeight: '800'
                           }}
                           onClick={() => {
                             bridge.haptic('light');
@@ -2075,7 +2255,7 @@ export default function App() {
                             setShowInviteModal(true);
                           }}
                         >
-                          🤝 Kết nối nhanh
+                          📅 Đặt lịch làm quen tuần đầu
                         </button>
                       </div>
                     </section>
@@ -2179,6 +2359,33 @@ export default function App() {
                                     </span>
                                   ))}
                                 </div>
+
+                                {/* Knowledge Overlaps */}
+                                {(() => {
+                                  const myShare = myProfile.share_skills || [];
+                                  const myLearn = myProfile.learn_skills || [];
+                                  const theirShare = profile.share_skills || [];
+                                  const theirLearn = profile.learn_skills || [];
+                                  const commonLearnSkills = myLearn.filter(s => theirShare.includes(s));
+                                  const commonShareSkills = myShare.filter(s => theirLearn.includes(s));
+
+                                  if (commonLearnSkills.length === 0 && commonShareSkills.length === 0) return null;
+
+                                  return (
+                                    <div className="buddy-labels-row" style={{ marginTop: 6, gap: '4px' }}>
+                                      {commonLearnSkills.map(s => (
+                                        <span key={`learn-${s}`} className="buddy-status-pill priority-fallback" style={{ background: 'rgba(16,185,129,0.08)', borderColor: 'rgba(16,185,129,0.2)', color: '#10B981', fontSize: '10.5px', padding: '2px 8px', borderRadius: '8px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                          📖 Muốn học: {s} (họ chia sẻ)
+                                        </span>
+                                      ))}
+                                      {commonShareSkills.map(s => (
+                                        <span key={`share-${s}`} className="buddy-status-pill priority-fallback" style={{ background: 'rgba(245,158,11,0.08)', borderColor: 'rgba(245,158,11,0.2)', color: '#D97706', fontSize: '10.5px', padding: '2px 8px', borderRadius: '8px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                          🎓 Có thể dạy: {s} (họ muốn học)
+                                        </span>
+                                      ))}
+                                    </div>
+                                  );
+                                })()}
 
                                 {/* Skills của người kia */}
                                 {profile.skills?.length > 0 && (
@@ -2431,7 +2638,7 @@ export default function App() {
                                   Bạn và {buddy.full_name} đã gặp nhau chưa?
                                 </h5>
                                 <p style={{ margin: 0, fontSize: '11.5px', color: '#4B5563', lineHeight: '1.4' }}>
-                                  Hình thức: <strong>{typeLabel}</strong>. Xác nhận gặp để nhận ngay 10 điểm kết nối!
+                                  Hình thức: <strong>{typeLabel}</strong>. {req.action_type === 'intro_meet' ? 'Xác nhận gặp để nhận ngay 15 điểm thưởng nhân viên mới! 🌟' : 'Xác nhận gặp để nhận ngay 10 điểm kết nối!'}
                                 </p>
                               </div>
                             </div>
@@ -2478,6 +2685,123 @@ export default function App() {
                   </section>
                 );
               })()}
+
+              {/* Buddy Helper: Newbies being supported */}
+              {myProfile.is_buddy_helper && (
+                <section className="mushy-card buddy-helper-dashboard" style={{
+                  background: 'linear-gradient(135deg, #F0FDFA 0%, #CCFBF1 100%)',
+                  border: '1.5px solid #5EEAD4',
+                  borderRadius: '20px',
+                  padding: '16px 18px',
+                  boxShadow: '0 8px 24px rgba(13, 148, 136, 0.05)',
+                  margin: '0 0 16px'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                    <span style={{ fontSize: '13px', fontWeight: '800', color: '#0D9488', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      🤝 Vai trò: Buddy Helper ({(helperNewbieCounts && helperNewbieCounts[ctx.userId]) || 0}/3 Newbies)
+                    </span>
+                    {((helperNewbieCounts && helperNewbieCounts[ctx.userId]) || 0) >= 3 ? (
+                      <span style={{ fontSize: '10px', fontWeight: '800', background: '#FEE2E2', color: '#EF4444', padding: '2px 6px', borderRadius: '6px' }}>
+                        🔥 Đầy tải (Tạm ẩn gợi ý)
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: '10px', fontWeight: '800', background: '#E0F2FE', color: '#0284C7', padding: '2px 6px', borderRadius: '6px' }}>
+                        🟢 Sẵn sàng nhận match
+                      </span>
+                    )}
+                  </div>
+
+                  <p style={{ margin: '0 0 12px', fontSize: '11.5px', color: '#374151', lineHeight: '1.4', textAlign: 'left' }}>
+                    Bạn đang đóng vai trò là người hướng dẫn cho nhân viên mới. Danh sách các newbie bạn đang hỗ trợ:
+                  </p>
+
+                  {(() => {
+                    const supportedNewbies = connectionRequests.filter(r => 
+                      r.to_user_id === ctx.userId && 
+                      (r.status === 'pending' || r.status === 'accepted')
+                    );
+
+                    if (supportedNewbies.length === 0) {
+                      return (
+                        <p style={{ margin: 0, fontSize: '12px', color: '#6B7280', fontStyle: 'italic', textAlign: 'left' }}>
+                          Chưa có newbie nào gửi lời mời làm quen.
+                        </p>
+                      );
+                    }
+
+                    return (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        {supportedNewbies.map(req => {
+                          const newbie = members.find(m => m.user_id === req.from_user_id) || { full_name: 'Nhân viên mới' };
+                          const newbieProf = allProfiles[req.from_user_id] || {};
+                          const statusLabel = req.status === 'pending' ? 'Đang chờ duyệt' : 'Đã kết nối';
+
+                          return (
+                            <div key={req.id} style={{
+                              background: '#fff',
+                              borderRadius: '12px',
+                              padding: '10px 12px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              border: '1px solid rgba(13, 148, 136, 0.15)'
+                            }}>
+                              <div style={{ textAlign: 'left' }}>
+                                <div style={{ fontSize: '13px', fontWeight: '700', color: '#1F2937' }}>
+                                  👶 {newbie.full_name}
+                                </div>
+                                <div style={{ fontSize: '11px', color: '#6B7280', marginTop: '2px' }}>
+                                  🏢 {newbieProf.department || 'Phòng ban'} · {statusLabel}
+                                </div>
+                              </div>
+                              <div style={{ display: 'flex', gap: '6px' }}>
+                                {req.status === 'pending' ? (
+                                  <button
+                                    type="button"
+                                    className="mushy-btn"
+                                    style={{
+                                      fontSize: '11px',
+                                      padding: '2px 8px',
+                                      minHeight: '26px',
+                                      height: '26px',
+                                      background: '#0D9488',
+                                      borderColor: '#0D9488',
+                                      color: '#fff',
+                                      borderRadius: '8px'
+                                    }}
+                                    onClick={() => handleRespondRequest(req.id, 'accepted')}
+                                  >
+                                    Duyệt
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    className="mushy-btn mushy-btn--ghost"
+                                    style={{
+                                      fontSize: '11px',
+                                      padding: '2px 8px',
+                                      minHeight: '26px',
+                                      height: '26px',
+                                      borderRadius: '8px',
+                                      margin: 0
+                                    }}
+                                    onClick={() => {
+                                      bridge.haptic('light');
+                                      setActiveChatConnection(req);
+                                    }}
+                                  >
+                                    Chat
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </section>
+              )}
 
               {/* Active Connections & Chat list */}
               <section>
