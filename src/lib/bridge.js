@@ -156,6 +156,9 @@ export const bridge = {
   //   { title, startDate, endDate?, notes?, location?, allDay? }
   //   startDate/endDate = ISO string hoặc epoch ms.
   addCalendarEvent: (payload) => callNative('ADD_CALENDAR_EVENT', payload),
+
+  // Thoát khỏi mini-app (quay về trang chủ Super App)
+  closeMiniApp: () => callNative('CLOSE_MINI_APP'),
 };
 
 // ---------- Mocks (DEV only, low-level callNative path) ----------
@@ -229,6 +232,14 @@ async function mock(type, payload) {
     case 'LOCK_CHAT_GROUP_READONLY':
       console.log('[mock lock-chat-group]', payload);
       return { locked: true };
+    case 'CLOSE_MINI_APP':
+      console.log('[mock close-mini-app] Exiting mini-app...');
+      if (typeof window !== 'undefined') {
+        setTimeout(() => {
+          alert('🍄 [Mushy Connect] Đã thực hiện đặt lại tài khoản mới & thoát ứng dụng thành công!');
+        }, 100);
+      }
+      return { closed: true };
     default:
       throw new Error(`Bridge mock chưa hỗ trợ type: ${type}`);
   }

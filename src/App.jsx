@@ -523,8 +523,8 @@ export default function App() {
 
       if (prof) {
         setMyProfile({
-          department: prof.department || '',
-          facility: prof.facility || '',
+          department: prof.department === 'Chưa cập nhật' ? '' : (prof.department || ''),
+          facility: prof.facility === 'Chưa cập nhật' ? '' : (prof.facility || ''),
           available_times: prof.available_times || [],
           share_skills: prof.share_skills || [],
           learn_skills: prof.learn_skills || [],
@@ -801,8 +801,8 @@ export default function App() {
             workspace_id: activeWs,
             consent_granted_at: consentTime,
             updated_at: consentTime,
-            department: '',
-            facility: '',
+            department: 'Chưa cập nhật',
+            facility: 'Chưa cập nhật',
             available_times: [],
             share_skills: [],
             learn_skills: [],
@@ -825,7 +825,7 @@ export default function App() {
       await dialog.success('Xác nhận thành công!', 'Bạn đã đồng ý với các điều khoản chia sẻ dữ liệu và kết nối.');
       
       // If user profile details are not fully set up yet, show the setup modal.
-      if (!existingProf || !existingProf.department || !existingProf.facility) {
+      if (!existingProf || !existingProf.department || existingProf.department === 'Chưa cập nhật' || !existingProf.facility || existingProf.facility === 'Chưa cập nhật') {
         setShowProfileModal(true);
       }
       
@@ -3520,6 +3520,69 @@ export default function App() {
                     onClick={handleSaveProfile}
                   >
                     Lưu hồ sơ Connect 🍄
+                  </button>
+
+                  <button
+                    type="button"
+                    className="mushy-btn mushy-btn--ghost mushy-btn--block"
+                    style={{ marginTop: 12, borderColor: 'var(--danger)', color: 'var(--danger)', fontWeight: 'bold' }}
+                    onClick={async () => {
+                      const ok = await dialog.confirm(
+                        'Đặt lại hồ sơ & Thoát?', 
+                        'Thao tác này sẽ xoá sạch hồ sơ, sở thích, điểm số và các yêu cầu kết nối của bạn để trải nghiệm lại như người dùng mới từ đầu. Ứng dụng sẽ tự động đóng sau khi hoàn tất.', 
+                        {
+                          danger: true,
+                          confirmLabel: 'Xác nhận đặt lại & Thoát',
+                          cancelLabel: 'Hủy'
+                        }
+                      );
+                      if (!ok) return;
+
+                      try {
+                        const activeWs = scope.workspaceId;
+                        
+                        // 1. Delete user profile & tags
+                        await db.from('user_profiles').delete().eq('workspace_id', activeWs).eq('user_id', ctx.userId);
+                        await db.from('user_tags').delete().eq('workspace_id', activeWs).eq('user_id', ctx.userId);
+                        
+                        // 2. Delete points & requests sent by user
+                        await db.from('connection_points').delete().eq('workspace_id', activeWs).eq('user_id', ctx.userId);
+                        await db.from('connection_requests').delete().eq('workspace_id', activeWs).eq('from_user_id', ctx.userId);
+
+                        // 3. Clear local storage consent
+                        if (typeof localStorage !== 'undefined') {
+                          localStorage.removeItem(`mushy.consentGranted.${activeWs}.${ctx.userId}`);
+                        }
+
+                        // 4. Reset React states
+                        setConsentGranted(false);
+                        setConsentCheckbox(false);
+                        setHasProfile(false);
+                        setMyProfile({
+                          department: '',
+                          facility: '',
+                          available_times: [],
+                          share_skills: [],
+                          learn_skills: [],
+                          connect_types: [],
+                          is_newbie: false,
+                          is_buddy_helper: false,
+                          consent_granted_at: null,
+                        });
+                        setMyTags([]);
+                        setMySkills([]);
+                        setMyGoals([]);
+
+                        await dialog.success('Đã đặt lại!', 'Hồ sơ đã được dọn sạch. Ứng dụng sẽ tự đóng ngay bây giờ.');
+                        
+                        // 5. Exit application
+                        await bridge.closeMiniApp();
+                      } catch (err) {
+                        dialog.error('Lỗi đặt lại', err.message);
+                      }
+                    }}
+                  >
+                    🔄 Đặt lại hồ sơ & Thoát
                   </button>
                 </div>
               </section>
