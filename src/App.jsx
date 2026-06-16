@@ -1010,6 +1010,7 @@ export default function App() {
               myProfile={data.myProfile}
               mySkills={data.mySkills}
               myGoals={data.myGoals}
+              myTags={data.myTags}
               searchQuery={searchQuery}
               fallbackEnabled={fallbackEnabled}
               scope={scope}

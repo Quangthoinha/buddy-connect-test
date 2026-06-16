@@ -11,6 +11,7 @@ export default function RadarScreen({
   myProfile,
   mySkills,
   myGoals,
+  myTags,
   searchQuery,
   fallbackEnabled,
   scope,
@@ -105,6 +106,8 @@ export default function RadarScreen({
           <NewbieRoadmap
             myProfile={myProfile}
             hasProfile={hasProfile}
+            mySkills={mySkills}
+            myTags={myTags}
             hasConnectedPrimaryBuddy={hasConnectedPrimaryBuddy}
             hasMetPrimaryBuddy={hasMetPrimaryBuddy}
             newbiePrimaryBuddy={newbiePrimaryBuddy}

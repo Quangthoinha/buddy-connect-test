@@ -5,6 +5,8 @@ import { getConnectTypeTemplate } from '../lib/app/connect.js';
 export default function NewbieRoadmap({
   myProfile,
   hasProfile,
+  mySkills,
+  myTags,
   hasConnectedPrimaryBuddy,
   hasMetPrimaryBuddy,
   newbiePrimaryBuddy,
@@ -14,7 +16,12 @@ export default function NewbieRoadmap({
   if (!myProfile?.is_newbie) return null;
 
   const step1 = true;
-  const step2 = hasProfile && myProfile.department && myProfile.facility && (myProfile.tags?.length > 0 || myProfile.skills?.length > 0);
+  const step2 = hasProfile && 
+                myProfile.department && 
+                myProfile.department !== 'Chưa cập nhật' && 
+                myProfile.facility && 
+                myProfile.facility !== 'Chưa cập nhật' && 
+                ((myTags && myTags.length > 0) || (mySkills && mySkills.length > 0));
   const step3 = hasConnectedPrimaryBuddy;
   const step4 = hasMetPrimaryBuddy;
 
