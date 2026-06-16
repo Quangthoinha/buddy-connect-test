@@ -1,7 +1,7 @@
 import React from 'react';
 import { bridge } from '../lib/bridge.js';
 import { getAvatarGradient } from '../lib/app/avatar.js';
-import { getConnectTypeLabel, parseMessageTemplate } from '../lib/app/connect.js';
+import { getConnectTypeLabel, parseMessageTemplate, isConnectionExpired, formatName } from '../lib/app/connect.js';
 import { parseChatMessages } from '../lib/app/chat.js';
 
 export default function ConnectionsScreen({
@@ -9,6 +9,8 @@ export default function ConnectionsScreen({
   myProfile,
   connectionMeetings,
   connectionRequests,
+  rooms = [],
+  invitations = [],
   members,
   allProfiles,
   allPoints,
@@ -17,8 +19,12 @@ export default function ConnectionsScreen({
   onConfirmMeeting,
   onOpenChat,
   onOpenInvite,
-  onOpenSharing
+  onOpenSharing,
+  onCreateCommunityClick,
+  onDeleteConnectionRequest
 }) {
+  const [activeFilter, setActiveFilter] = React.useState('all');
+
   const pendingConfirmationMeetings = connectionMeetings.filter(m => {
     if (m.status !== 'pending_confirmation') return false;
     const req = connectionRequests.find(r => r.id === m.request_id);
@@ -28,7 +34,29 @@ export default function ConnectionsScreen({
     return (isFrom && !m.from_confirmed) || (isTo && !m.to_confirmed);
   });
 
-  const activeConns = connectionRequests.filter(r => r.status === 'accepted');
+  const active1to1 = connectionRequests.filter(r => r.status === 'accepted');
+  
+  const activeOutings = (rooms || []).filter(r => {
+    if (r.is_club) return false;
+    const isHost = r.host_id === ctx.userId;
+    const isMember = (invitations || []).some(i => i.room_id === r.id && i.receiver_id === ctx.userId && i.status === 'accepted');
+    return isHost || isMember;
+  });
+
+  const activeCommunities = (rooms || []).filter(r => {
+    if (!r.is_club) return false;
+    const isHost = r.host_id === ctx.userId;
+    const isMember = (invitations || []).some(i => i.room_id === r.id && i.receiver_id === ctx.userId && i.status === 'accepted');
+    return isHost || isMember;
+  });
+
+  // Combine and sort all active connections chronologically (newest first)
+  const allActiveConnections = [
+    ...active1to1.map(c => ({ ...c, connType: '1to1', timeStamp: c.resolved_at || c.created_at })),
+    ...activeOutings.map(o => ({ ...o, connType: 'outing', timeStamp: o.created_at })),
+    ...activeCommunities.map(m => ({ ...m, connType: 'community', timeStamp: m.created_at }))
+  ].sort((a, b) => new Date(b.timeStamp) - new Date(a.timeStamp));
+
   const outbox = connectionRequests.filter(r => r.from_user_id === ctx.userId && r.status === 'pending');
 
   return (
@@ -36,30 +64,56 @@ export default function ConnectionsScreen({
 
       <PointsCard points={myPoints} />
 
-      <button
-        type="button"
-        className="mushy-btn mushy-btn--primary"
-        style={{
-          width: '100%',
-          minHeight: '44px',
-          height: '44px',
-          borderRadius: '20px',
-          fontSize: '13.5px',
-          fontWeight: '800',
-          background: 'linear-gradient(135deg, var(--brand) 0%, #E63946 100%)',
-          border: 'none',
-          color: '#fff',
-          boxShadow: '0 8px 20px rgba(230, 57, 70, 0.1)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: '8px',
-          marginBottom: '4px'
-        }}
-        onClick={() => { bridge.haptic('light'); onOpenInvite?.(); }}
-      >
-        <span>➕</span> Gửi lời mời kết nối mới
-      </button>
+      <div style={{ display: 'flex', gap: '10px' }}>
+        <button
+          type="button"
+          className="mushy-btn mushy-btn--primary"
+          style={{
+            flex: 1,
+            minHeight: '44px',
+            height: '44px',
+            borderRadius: '20px',
+            fontSize: '13px',
+            fontWeight: '800',
+            background: 'linear-gradient(135deg, var(--brand) 0%, #E63946 100%)',
+            border: 'none',
+            color: '#fff',
+            boxShadow: '0 8px 20px rgba(230, 57, 70, 0.1)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px',
+            margin: 0
+          }}
+          onClick={() => { bridge.haptic('light'); onOpenInvite?.(); }}
+        >
+          <span>➕</span> Lời mời kết nối mới
+        </button>
+
+        <button
+          type="button"
+          className="mushy-btn"
+          style={{
+            flex: 1,
+            minHeight: '44px',
+            height: '44px',
+            borderRadius: '20px',
+            fontSize: '13px',
+            fontWeight: '800',
+            border: '1.5px solid #0d9488',
+            color: '#0d9488',
+            background: 'rgba(13, 148, 136, 0.05)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px',
+            margin: 0
+          }}
+          onClick={() => { bridge.haptic('light'); onCreateCommunityClick?.(); }}
+        >
+          <span>👥</span> Tạo cộng đồng
+        </button>
+      </div>
 
       {pendingConfirmationMeetings.length > 0 && (
         <PendingMeetings
@@ -84,17 +138,22 @@ export default function ConnectionsScreen({
       )}
 
       <ActiveConnections
-        connections={activeConns}
+        connections={allActiveConnections.filter(c => activeFilter === 'all' || c.connType === activeFilter)}
         members={members}
         allProfiles={allProfiles}
         ctx={ctx}
+        invitations={invitations}
         onChat={onOpenChat}
+        filter={activeFilter}
+        onFilterChange={setActiveFilter}
       />
 
       <Outbox
         outbox={outbox}
         members={members}
         allProfiles={allProfiles}
+        ctx={ctx}
+        onDelete={onDeleteConnectionRequest}
       />
 
       <Leaderboard
@@ -215,7 +274,7 @@ function PendingMeetings({ meetings, connectionRequests, members, ctx, onConfirm
                 <span style={{ fontSize: '32px' }}>☕</span>
                 <div style={{ flex: 1, textAlign: 'left' }}>
                   <h5 style={{ margin: '0 0 4px', fontSize: '13.5px', fontWeight: '800', color: '#1F2937' }}>
-                    Bạn và {buddy.full_name} đã gặp nhau chưa?
+                    Bạn và {formatName(buddy.full_name)} đã gặp nhau chưa?
                   </h5>
                   <p style={{ margin: 0, fontSize: '11.5px', color: '#4B5563', lineHeight: '1.4' }}>
                     Hình thức: <strong>{typeLabel}</strong>. {req?.action_type === 'intro_meet' ? 'Xác nhận gặp để nhận ngay 15 điểm thưởng nhân viên mới! 🌟' : 'Xác nhận gặp để nhận ngay 10 điểm kết nối!'}
@@ -225,7 +284,7 @@ function PendingMeetings({ meetings, connectionRequests, members, ctx, onConfirm
               <div style={{ display: 'flex', gap: '10px', marginTop: '14px', borderTop: '1px solid rgba(245, 158, 11, 0.15)', paddingTop: '12px' }}>
                 <button
                   type="button"
-                  className="mushy-btn mushy-btn--primary"
+                  className="mushy-btn"
                   style={{
                     flex: 2,
                     minHeight: '34px',
@@ -324,7 +383,7 @@ function BuddyHelperDashboard({ ctx, members, allProfiles, connectionRequests, h
               }}>
                 <div style={{ textAlign: 'left' }}>
                   <div style={{ fontSize: '13px', fontWeight: '700', color: '#1F2937' }}>
-                    👶 {newbie.full_name}
+                    👶 {formatName(newbie.full_name)}
                   </div>
                   <div style={{ fontSize: '11px', color: '#6B7280', marginTop: '2px' }}>
                     🏢 {newbieProf.department || 'Phòng ban'} · {statusLabel}
@@ -376,104 +435,296 @@ function BuddyHelperDashboard({ ctx, members, allProfiles, connectionRequests, h
   );
 }
 
-function ActiveConnections({ connections, members, allProfiles, ctx, onChat }) {
+function ActiveConnections({ connections, members, allProfiles, ctx, invitations, onChat, filter, onFilterChange }) {
   return (
     <section>
-      <h4 className="chip-group-title" style={{ margin: '0 0 10px 6px' }}>
-        💬 Kết nối đã thiết lập
-      </h4>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', margin: '0 0 10px 6px' }}>
+        <h4 className="chip-group-title" style={{ margin: 0 }}>
+          💬 Kết nối đã thiết lập
+        </h4>
+        <span style={{ fontSize: '11px', color: 'var(--muted)', fontWeight: 600 }}>{connections.length} kết nối</span>
+      </div>
+
+      <div className="chips-container" style={{ marginBottom: 14, marginLeft: 6 }}>
+        {[
+          { key: 'all', label: 'Tất cả' },
+          { key: '1to1', label: '⚡ 1-1' },
+          { key: 'outing', label: '🚗 Đi chung' },
+          { key: 'community', label: '👥 Cộng đồng' },
+        ].map(f => (
+          <button
+            key={f.key}
+            type="button"
+            className={`selectable-chip ${filter === f.key ? 'selectable-chip--selected' : ''}`}
+            style={{ fontSize: '12px', padding: '6px 12px' }}
+            onClick={() => onFilterChange?.(f.key)}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
 
       {connections.length === 0 ? (
         <div className="mushy-empty-state" style={{ padding: '30px 16px', margin: 0 }}>
           <div style={{ fontSize: '32px', marginBottom: '8px' }}>🤝</div>
           <h5 className="mushy-empty-title">Chưa có kết nối nào</h5>
-          <p className="mushy-empty-desc">Chấp nhận lời mời hoặc gửi rủ nhanh để thiết lập kết nối 1-1 và trò chuyện.</p>
+          <p className="mushy-empty-desc">Chấp nhận lời mời hoặc tự tạo cộng đồng để trò chuyện và kết nối.</p>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {connections.map(conn => {
-            const buddyId = conn.from_user_id === ctx.userId ? conn.to_user_id : conn.from_user_id;
-            const buddy = members.find(m => m.user_id === buddyId) || { full_name: 'Đồng nghiệp' };
-            const buddyProf = allProfiles[buddyId] || {};
-            const typeLabel = getConnectTypeLabel(conn.action_type);
-            const messages = parseChatMessages(conn.chat_messages);
-            const hasUnread = messages.length > 0 && messages[messages.length - 1].senderId !== ctx.userId;
+            if (conn.connType === '1to1') {
+              const buddyId = conn.from_user_id === ctx.userId ? conn.to_user_id : conn.from_user_id;
+              const buddy = members.find(m => m.user_id === buddyId) || { full_name: 'Đồng nghiệp' };
+              const buddyProf = allProfiles[buddyId] || {};
+              const typeLabel = getConnectTypeLabel(conn.action_type);
+              const messages = parseChatMessages(conn.chat_messages);
+              const hasUnread = messages.length > 0 && messages[messages.length - 1].senderId !== ctx.userId;
 
-            return (
-              <div key={conn.id} className="buddy-card-compact" style={{ padding: '14px 16px', margin: 0 }}>
-                <div className="buddy-card-main">
-                  <div className="buddy-avatar-compact" style={{ background: getAvatarGradient(buddy.full_name?.charAt(0)) }}>
-                    <span style={{ color: '#fff', fontWeight: 'bold' }}>{buddy.full_name?.charAt(0)}</span>
+              return (
+                <div key={`1to1-${conn.id}`} className="buddy-card-compact" style={{ padding: '14px 16px', margin: 0 }}>
+                  <div className="buddy-card-main">
+                    <div className="buddy-avatar-compact" style={{ background: getAvatarGradient(formatName(buddy.full_name).charAt(0)) }}>
+                      <span style={{ color: '#fff', fontWeight: 'bold' }}>{formatName(buddy.full_name).charAt(0)}</span>
+                    </div>
+                    <div className="buddy-body-compact" style={{ textAlign: 'left' }}>
+                      <div className="buddy-header-row">
+                        <h4 className="buddy-name-compact">{formatName(buddy.full_name)}</h4>
+                        <span style={{
+                          fontSize: '10px',
+                          fontWeight: '700',
+                          padding: '2px 8px',
+                          background: 'var(--brand-soft)',
+                          color: 'var(--brand)',
+                          borderRadius: '6px'
+                        }}>
+                          ⚡ 1-1 ({typeLabel})
+                        </span>
+                      </div>
+                      <div className="buddy-meta-row" style={{ marginTop: '2px' }}>
+                        <span className="buddy-dept">{buddyProf.department || 'Phòng ban'}</span>
+                        <span className="buddy-dot-separator">·</span>
+                        <span className="buddy-facility">{buddyProf.facility || 'Cơ sở'}</span>
+                      </div>
+                      {messages.length > 0 && (
+                        <p style={{
+                          margin: '6px 0 0',
+                          fontSize: '11.5px',
+                          color: hasUnread ? 'var(--brand)' : 'var(--muted)',
+                          fontWeight: hasUnread ? 'bold' : 'normal',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden'
+                        }}>
+                          💬 {messages[messages.length - 1].content}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                  <div className="buddy-body-compact" style={{ textAlign: 'left' }}>
-                    <div className="buddy-header-row">
-                      <h4 className="buddy-name-compact">{buddy.full_name}</h4>
-                      <span style={{
-                        fontSize: '10px',
-                        fontWeight: '700',
-                        padding: '2px 8px',
-                        background: 'var(--brand-soft)',
-                        color: 'var(--brand)',
-                        borderRadius: '6px'
-                      }}>
-                        {typeLabel}
-                      </span>
-                    </div>
-                    <div className="buddy-meta-row" style={{ marginTop: '2px' }}>
-                      <span className="buddy-dept">{buddyProf.department || 'Phòng ban'}</span>
-                      <span className="buddy-dot-separator">·</span>
-                      <span className="buddy-facility">{buddyProf.facility || 'Cơ sở'}</span>
-                    </div>
-                    {messages.length > 0 && (
-                      <p style={{
-                        margin: '6px 0 0',
+                  <div className="buddy-actions-compact" style={{ borderTop: '1px solid var(--hairline)', marginTop: '12px', paddingTop: '10px', display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                    <button
+                      type="button"
+                      className="mushy-btn"
+                      style={{
+                        minHeight: '30px',
+                        height: '30px',
                         fontSize: '11.5px',
-                        color: hasUnread ? 'var(--brand)' : 'var(--muted)',
-                        fontWeight: hasUnread ? 'bold' : 'normal',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden'
-                      }}>
-                        💬 {messages[messages.length - 1].content}
-                      </p>
-                    )}
+                        padding: '0 12px',
+                        background: 'var(--brand)',
+                        borderColor: 'var(--brand)',
+                        color: '#fff',
+                        fontWeight: '700',
+                        borderRadius: '16px',
+                        position: 'relative'
+                      }}
+                      onClick={() => { bridge.haptic('light'); onChat?.(conn); }}
+                    >
+                      Vào Chat
+                      {hasUnread && (
+                        <span style={{
+                          position: 'absolute',
+                          top: '-4px',
+                          right: '-4px',
+                          width: '8px',
+                          height: '8px',
+                          borderRadius: '50%',
+                          background: 'var(--brand)',
+                          border: '1.5px solid #fff'
+                        }} />
+                      )}
+                    </button>
                   </div>
                 </div>
-                <div className="buddy-actions-compact" style={{ borderTop: '1px solid var(--hairline)', marginTop: '12px', paddingTop: '10px', display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                  <button
-                    type="button"
-                    className="mushy-btn"
-                    style={{
-                      minHeight: '30px',
-                      height: '30px',
-                      fontSize: '11.5px',
-                      padding: '0 12px',
-                      background: 'var(--brand)',
-                      borderColor: 'var(--brand)',
-                      color: '#fff',
-                      fontWeight: '700',
-                      borderRadius: '16px',
-                      position: 'relative'
-                    }}
-                    onClick={() => { bridge.haptic('light'); onChat?.(conn); }}
-                  >
-                    Vào Chat
-                    {hasUnread && (
-                      <span style={{
-                        position: 'absolute',
-                        top: '-4px',
-                        right: '-4px',
-                        width: '8px',
-                        height: '8px',
-                        borderRadius: '50%',
-                        background: 'var(--brand)',
-                        border: '1.5px solid #fff'
-                      }} />
-                    )}
-                  </button>
+              );
+            } else if (conn.connType === 'outing') {
+              const hostObj = members.find(m => m.user_id === conn.host_id) || { full_name: 'Đồng nghiệp' };
+              const typeLabel = getConnectTypeLabel(conn.child_code);
+              const messages = parseChatMessages(conn.chat_messages);
+              const hasUnread = messages.length > 0 && messages[messages.length - 1].senderId !== ctx.userId;
+
+              return (
+                <div key={`outing-${conn.id}`} className="buddy-card-compact" style={{ padding: '14px 16px', margin: 0, borderLeft: '4px solid #0284c7' }}>
+                  <div className="buddy-card-main">
+                    <div className="buddy-avatar-compact" style={{ background: 'linear-gradient(135deg, #0284c7 0%, #38bdf8 100%)' }}>
+                      <span style={{ color: '#fff', fontWeight: 'bold' }}>🚗</span>
+                    </div>
+                    <div className="buddy-body-compact" style={{ textAlign: 'left' }}>
+                      <div className="buddy-header-row">
+                        <h4 className="buddy-name-compact" style={{ color: '#0284c7' }}>Phòng đi chung</h4>
+                        <span style={{
+                          fontSize: '10px',
+                          fontWeight: '700',
+                          padding: '2px 8px',
+                          background: 'rgba(2, 132, 199, 0.1)',
+                          color: '#0284c7',
+                          borderRadius: '6px'
+                        }}>
+                          🚗 Đi chung ({typeLabel})
+                        </span>
+                      </div>
+                      <div className="buddy-meta-row" style={{ marginTop: '2px' }}>
+                        <span className="buddy-dept">Host: {formatName(hostObj.full_name)}</span>
+                        <span className="buddy-dot-separator">·</span>
+                        <span className="buddy-facility">📍 {conn.location}</span>
+                      </div>
+                      {messages.length > 0 && (
+                        <p style={{
+                          margin: '6px 0 0',
+                          fontSize: '11.5px',
+                          color: hasUnread ? '#0284c7' : 'var(--muted)',
+                          fontWeight: hasUnread ? 'bold' : 'normal',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden'
+                        }}>
+                          💬 {messages[messages.length - 1].content}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="buddy-actions-compact" style={{ borderTop: '1px solid var(--hairline)', marginTop: '12px', paddingTop: '10px', display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                    <button
+                      type="button"
+                      className="mushy-btn"
+                      style={{
+                        minHeight: '30px',
+                        height: '30px',
+                        fontSize: '11.5px',
+                        padding: '0 12px',
+                        background: '#0284c7',
+                        borderColor: '#0284c7',
+                        color: '#fff',
+                        fontWeight: '700',
+                        borderRadius: '16px',
+                        position: 'relative'
+                      }}
+                      onClick={() => { bridge.haptic('light'); onChat?.(conn); }}
+                    >
+                      Chat nhóm
+                      {hasUnread && (
+                        <span style={{
+                          position: 'absolute',
+                          top: '-4px',
+                          right: '-4px',
+                          width: '8px',
+                          height: '8px',
+                          borderRadius: '50%',
+                          background: '#0284c7',
+                          border: '1.5px solid #fff'
+                        }} />
+                      )}
+                    </button>
+                  </div>
                 </div>
-              </div>
-            );
+              );
+            } else if (conn.connType === 'community') {
+              const hostObj = members.find(m => m.user_id === conn.host_id) || { full_name: 'Đồng nghiệp' };
+              const typeLabel = getConnectTypeLabel(conn.child_code);
+              const acceptedInvs = (invitations || []).filter(i => i.room_id === conn.id && i.status === 'accepted');
+              const memberCount = 1 + acceptedInvs.length; // Host + accepted members
+              const messages = parseChatMessages(conn.chat_messages);
+              const hasUnread = messages.length > 0 && messages[messages.length - 1].senderId !== ctx.userId;
+
+              return (
+                <div key={`club-${conn.id}`} className="buddy-card-compact" style={{ padding: '14px 16px', margin: 0, borderLeft: '4px solid #0d9488' }}>
+                  <div className="buddy-card-main">
+                    <div className="buddy-avatar-compact" style={{ background: 'linear-gradient(135deg, #0d9488 0%, #14b8a6 100%)' }}>
+                      <span style={{ color: '#fff', fontWeight: 'bold' }}>👥</span>
+                    </div>
+                    <div className="buddy-body-compact" style={{ textAlign: 'left' }}>
+                      <div className="buddy-header-row">
+                        <h4 className="buddy-name-compact" style={{ color: '#0d9488' }}>{conn.club_name}</h4>
+                        <span style={{
+                          fontSize: '10px',
+                          fontWeight: '700',
+                          padding: '2px 8px',
+                          background: 'rgba(13, 148, 136, 0.1)',
+                          color: '#0d9488',
+                          borderRadius: '6px'
+                        }}>
+                          👥 Cộng đồng ({typeLabel})
+                        </span>
+                      </div>
+                      <p style={{ margin: '2px 0 0', fontSize: '11.5px', color: 'var(--muted)', fontStyle: 'italic', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {conn.club_description || 'Cộng đồng giao lưu, chia sẻ.'}
+                      </p>
+                      <div className="buddy-meta-row" style={{ marginTop: '4px' }}>
+                        <span className="buddy-dept">Mở bởi: {formatName(hostObj.full_name)}</span>
+                        <span className="buddy-dot-separator">·</span>
+                        <span className="buddy-facility">👥 {memberCount} thành viên</span>
+                      </div>
+                      {messages.length > 0 && (
+                        <p style={{
+                          margin: '6px 0 0',
+                          fontSize: '11.5px',
+                          color: hasUnread ? '#0d9488' : 'var(--muted)',
+                          fontWeight: hasUnread ? 'bold' : 'normal',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden'
+                        }}>
+                          💬 {messages[messages.length - 1].content}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="buddy-actions-compact" style={{ borderTop: '1px solid var(--hairline)', marginTop: '12px', paddingTop: '10px', display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                    <button
+                      type="button"
+                      className="mushy-btn"
+                      style={{
+                        minHeight: '30px',
+                        height: '30px',
+                        fontSize: '11.5px',
+                        padding: '0 12px',
+                        background: '#0d9488',
+                        borderColor: '#0d9488',
+                        color: '#fff',
+                        fontWeight: '700',
+                        borderRadius: '16px',
+                        position: 'relative'
+                      }}
+                      onClick={() => { bridge.haptic('light'); onChat?.(conn); }}
+                    >
+                      Vào Chat
+                      {hasUnread && (
+                        <span style={{
+                          position: 'absolute',
+                          top: '-4px',
+                          right: '-4px',
+                          width: '8px',
+                          height: '8px',
+                          borderRadius: '50%',
+                          background: '#0d9488',
+                          border: '1.5px solid #fff'
+                        }} />
+                      )}
+                    </button>
+                  </div>
+                </div>
+              );
+            }
+            return null;
           })}
         </div>
       )}
@@ -481,12 +732,17 @@ function ActiveConnections({ connections, members, allProfiles, ctx, onChat }) {
   );
 }
 
-function Outbox({ outbox, members, allProfiles }) {
+function Outbox({ outbox, members, allProfiles, ctx, onDelete }) {
   return (
     <section>
-      <h4 className="chip-group-title" style={{ margin: '0 0 10px 6px' }}>
-        📤 Yêu cầu đã gửi (Outbox)
-      </h4>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '0 0 10px 6px' }}>
+        <h4 className="chip-group-title" style={{ margin: 0 }}>
+          📤 Yêu cầu đã gửi (Outbox)
+        </h4>
+        {outbox.some(req => isConnectionExpired(req)) && (
+          <span style={{ fontSize: '10px', color: '#9CA3AF', fontWeight: 600 }}>⏰ Có lời mời quá hạn</span>
+        )}
+      </div>
 
       {outbox.length === 0 ? (
         <div className="mushy-empty-state" style={{ padding: '24px 16px', margin: 0 }}>
@@ -499,43 +755,67 @@ function Outbox({ outbox, members, allProfiles }) {
             const buddyProf = allProfiles[req.to_user_id] || {};
             const typeLabel = getConnectTypeLabel(req.action_type);
             const { text, time, location } = parseMessageTemplate(req.message_template);
+            const expired = isConnectionExpired(req);
 
             return (
-              <div key={req.id} className="buddy-card-compact" style={{
-                background: 'rgba(255,255,255,0.5)',
+              <div key={req.id} className={`buddy-card-compact ${expired ? 'invitation-card--expired' : ''}`} style={{
+                background: expired ? '#F9FAFB' : 'rgba(255,255,255,0.5)',
                 padding: '12px 14px',
                 margin: 0,
-                borderColor: 'rgba(15,15,18,0.05)'
+                borderColor: expired ? '#E5E7EB' : 'rgba(15,15,18,0.05)'
               }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                   <div style={{ textAlign: 'left', minWidth: 0, flex: 1 }}>
-                    <div style={{ fontSize: '13px', fontWeight: '700', color: 'var(--ink)' }}>
-                      Gửi tới: {buddy.full_name}
+                    <div style={{ fontSize: '13px', fontWeight: '700', color: expired ? '#9CA3AF' : 'var(--ink)' }}>
+                      Gửi tới: {formatName(buddy.full_name)}
                     </div>
-                    <div style={{ fontSize: '10.5px', color: 'var(--muted)', marginTop: '2px' }}>
-                      Hình thức: <strong>{typeLabel}</strong> · Trạng thái: <span style={{ color: '#F59E0B', fontWeight: '700' }}>Chờ phản hồi</span>
+                    <div style={{ fontSize: '10.5px', color: expired ? '#9CA3AF' : 'var(--muted)', marginTop: '2px' }}>
+                      Hình thức: <strong>{typeLabel}</strong> · Trạng thái: {' '}
+                      {expired ? (
+                        <span style={{ color: '#9CA3AF', fontWeight: '700' }}>⏰ Quá hạn</span>
+                      ) : (
+                        <span style={{ color: '#F59E0B', fontWeight: '700' }}>Chờ phản hồi</span>
+                      )}
                     </div>
                     <div style={{ marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
                       {time && (
-                        <div style={{ fontSize: '10.5px', color: '#4B5563', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <div style={{ fontSize: '10.5px', color: expired ? '#9CA3AF' : '#4B5563', display: 'flex', alignItems: 'center', gap: '4px' }}>
                           <span>📅</span> <span>Hẹn lúc: <strong>{time}</strong></span>
                         </div>
                       )}
                       {location && (
-                        <div style={{ fontSize: '10.5px', color: '#4B5563', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <div style={{ fontSize: '10.5px', color: expired ? '#9CA3AF' : '#4B5563', display: 'flex', alignItems: 'center', gap: '4px' }}>
                           <span>📍</span> <span>Tại: <strong>{location}</strong></span>
                         </div>
                       )}
                       {text && (
-                        <p style={{ margin: '4px 0 0', fontSize: '11px', color: 'var(--muted)', fontStyle: 'italic', background: 'rgba(0,0,0,0.01)', padding: '4px 6px', borderRadius: '6px' }}>
+                        <p style={{ margin: '4px 0 0', fontSize: '11px', color: expired ? '#9CA3AF' : 'var(--muted)', fontStyle: 'italic', background: 'rgba(0,0,0,0.01)', padding: '4px 6px', borderRadius: '6px' }}>
                           💬 "{text}"
                         </p>
                       )}
                     </div>
                   </div>
-                  <span style={{ fontSize: '10px', color: 'var(--muted)', flexShrink: 0 }}>
-                    {new Date(req.created_at).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}
-                  </span>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0 }}>
+                    <span style={{ fontSize: '10px', color: expired ? '#9CA3AF' : 'var(--muted)' }}>
+                      {new Date(req.created_at).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}
+                    </span>
+                    <button
+                      type="button"
+                      className="mushy-btn mushy-btn--ghost"
+                      style={{
+                        minHeight: '28px',
+                        height: '28px',
+                        fontSize: '11px',
+                        padding: '0 10px',
+                        color: 'var(--danger)',
+                        borderColor: 'var(--danger)',
+                        borderRadius: '8px'
+                      }}
+                      onClick={() => onDelete?.(req.id)}
+                    >
+                      {expired ? 'Xoá' : 'Thu hồi'}
+                    </button>
+                  </div>
                 </div>
               </div>
             );
@@ -599,7 +879,7 @@ function Leaderboard({ allPoints, members, ctx, onOpenSharing }) {
                       width: '28px',
                       height: '28px',
                       borderRadius: '50%',
-                      background: getAvatarGradient(userObj.full_name?.charAt(0)),
+                      background: getAvatarGradient((isMe ? 'Bạn' : formatName(userObj.full_name)).charAt(0)),
                       color: '#fff',
                       display: 'flex',
                       alignItems: 'center',
@@ -608,7 +888,7 @@ function Leaderboard({ allPoints, members, ctx, onOpenSharing }) {
                       fontWeight: 'bold',
                       flexShrink: 0
                     }}>
-                      {userObj.full_name?.charAt(0)}
+                      {(isMe ? 'Bạn' : formatName(userObj.full_name)).charAt(0)}
                     </div>
                     <div style={{ minWidth: 0, flex: 1, textAlign: 'left' }}>
                       <span style={{
@@ -620,7 +900,7 @@ function Leaderboard({ allPoints, members, ctx, onOpenSharing }) {
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap'
                       }}>
-                        {userObj.full_name} {isMe ? '(Tôi)' : ''}
+                        {isMe ? 'Bạn' : formatName(userObj.full_name)} {isMe ? '(Tôi)' : ''}
                       </span>
                       {row.helper_badge_level && (
                         <span style={{
@@ -638,7 +918,7 @@ function Leaderboard({ allPoints, members, ctx, onOpenSharing }) {
                     </div>
                   </div>
                   <div style={{ textAlign: 'right', flexShrink: 0, fontWeight: '800', fontSize: '13px', color: 'var(--ink)' }}>
-                    {row.points} <span style={{ fontSize: '10px', color: 'var(--muted)', fontWeight: 'normal' }}>đối tác</span>
+                    {row.points} <span style={{ fontSize: '10px', color: 'var(--muted)', fontWeight: 'normal' }}>điểm</span>
                   </div>
                 </div>
               );

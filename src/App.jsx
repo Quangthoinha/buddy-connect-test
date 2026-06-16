@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { getContext } from './lib/context.js';
+import { getContext, isInShell } from './lib/context.js';
 import { bridge } from './lib/bridge.js';
 import { db } from './lib/supabase.js';
 import {
@@ -14,7 +14,7 @@ import {
 import { useDialog } from './components/Dialog.jsx';
 import { mushyApi } from './lib/mushy-api.js';
 import { TAXONOMY } from './lib/app/taxonomy.jsx';
-import { getConnectTypeLabel, getConnectTypeTemplate } from './lib/app/connect.js';
+import { getConnectTypeLabel, getConnectTypeTemplate, isConnectionExpired } from './lib/app/connect.js';
 
 // Hooks
 import { useBuddyData } from './hooks/useBuddyData.js';
@@ -31,11 +31,11 @@ import ScopeSwitcher from './components/ScopeSwitcher.jsx';
 import SkeletonScreen from './components/SkeletonScreen.jsx';
 import QuickConnectSheet from './components/QuickConnectSheet.jsx';
 import InviteModal from './components/InviteModal.jsx';
+import CreateCommunityModal from './components/CreateCommunityModal.jsx';
 import ProfileModal from './components/ProfileModal.jsx';
 import SharingModal from './components/SharingModal.jsx';
 import ChatModal from './components/ChatModal.jsx';
 import ShareManageModal from './components/ShareManageModal.jsx';
-
 import './App.css';
 
 export default function App() {
@@ -78,6 +78,7 @@ export default function App() {
   const [selectedConnectBuddy, setSelectedConnectBuddy] = useState(null);
 
   const [showInviteModal, setShowInviteModal] = useState(false);
+  const [showCreateCommunityModal, setShowCreateCommunityModal] = useState(false);
   const [inviteSelectedUserIds, setInviteSelectedUserIds] = useState([]);
   const [inviteType, setInviteType] = useState('food');
   const [inviteTime, setInviteTime] = useState('');
@@ -142,10 +143,10 @@ export default function App() {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${ctx.token}`,
-          'X-Workspace-Id': scope.workspaceId,
+          'X-Workspace-Id': scope?.workspaceId || ctx?.workspaceId,
           'X-Home-Workspace-Id': ctx.workspaceId,
         },
-        body: JSON.stringify({ userId: ctx.userId, workspaceId: scope.workspaceId }),
+        body: JSON.stringify({ userId: ctx.userId, workspaceId: scope?.workspaceId || ctx?.workspaceId }),
       });
       if (!res.ok) return;
       const result = await res.json();
@@ -175,7 +176,7 @@ export default function App() {
 
     try {
       bridge.haptic('medium');
-      const activeWs = scope.workspaceId;
+      const activeWs = scope?.workspaceId || ctx?.workspaceId;
 
       // Auto-seed tags taxonomy if missing
       try {
@@ -248,7 +249,7 @@ export default function App() {
   const handleGrantConsent = async () => {
     try {
       bridge.haptic('medium');
-      const activeWs = scope.workspaceId;
+      const activeWs = scope?.workspaceId || ctx?.workspaceId;
       if (!activeWs) return;
 
       const consentTime = new Date().toISOString();
@@ -340,7 +341,7 @@ export default function App() {
 
     try {
       bridge.haptic('medium');
-      const activeWs = scope.workspaceId;
+      const activeWs = scope?.workspaceId || ctx?.workspaceId;
       if (!activeWs) return;
 
       const messageTemplateJson = JSON.stringify({
@@ -417,7 +418,7 @@ export default function App() {
   const handleSendConnectionRequest = async (buddyId, actionType, messageTemplate) => {
     try {
       bridge.haptic('medium');
-      const activeWs = scope.workspaceId;
+      const activeWs = scope?.workspaceId || ctx?.workspaceId;
       if (!activeWs) return;
 
       const { data: existing } = await db
@@ -476,7 +477,7 @@ export default function App() {
   const handleRespondRequest = async (requestId, status) => {
     try {
       bridge.haptic('medium');
-      const activeWs = scope.workspaceId;
+      const activeWs = scope?.workspaceId || ctx?.workspaceId;
       if (!activeWs) return;
 
       const now = new Date().toISOString();
@@ -515,10 +516,6 @@ export default function App() {
         } catch (pushErr) {
           console.warn('Lỗi push notification:', pushErr);
         }
-
-        await dialog.success('Đã chấp nhận!', 'Bạn đã đồng ý kết nối. Cuộc gặp mặt đã được lập lịch xác nhận.');
-      } else {
-        await dialog.info('Đã từ chối', 'Bạn đã từ chối yêu cầu kết nối.');
       }
 
       data.loadConnectionData();
@@ -527,8 +524,49 @@ export default function App() {
     }
   };
 
+  const handleDeleteConnectionRequest = async (requestId) => {
+    const req = data.connectionRequests.find(r => r.id === requestId);
+    const expired = isConnectionExpired(req);
+
+    const ok = await dialog.confirm(
+      expired ? 'Xoá lời mời quá hạn?' : 'Thu hồi lời mời?',
+      expired
+        ? 'Lời mời này đã quá hạn. Xoá để dọn dẹp Outbox.'
+        : 'Người nhận sẽ không còn thấy lời mời này nữa.',
+      { danger: true, confirmLabel: expired ? 'Xoá' : 'Thu hồi', cancelLabel: 'Hủy' }
+    );
+    if (!ok) return;
+
+    try {
+      bridge.haptic('medium');
+      const { error } = await db.from('connection_requests').delete().eq('id', requestId);
+      if (error) throw error;
+      data.loadConnectionData();
+    } catch (e) {
+      dialog.error('Lỗi thu hồi lời mời', e.message);
+    }
+  };
+
+  const handleDeleteInvitation = async (invitationId) => {
+    const ok = await dialog.confirm(
+      'Xoá lời mời?',
+      'Lời mời sẽ bị xoá khỏi hộp thư của bạn.',
+      { danger: true, confirmLabel: 'Xoá', cancelLabel: 'Hủy' }
+    );
+    if (!ok) return;
+
+    try {
+      bridge.haptic('medium');
+      const { error } = await db.from('invitations').delete().eq('id', invitationId);
+      if (error) throw error;
+      data.loadConnectionData();
+    } catch (e) {
+      dialog.error('Lỗi xoá lời mời', e.message);
+    }
+  };
+
   const awardConnectionPoints = async (userId, pointsToAdd) => {
-    const activeWs = scope.workspaceId;
+    const activeWs = scope?.workspaceId || ctx?.workspaceId;
     if (!activeWs) return;
 
     try {
@@ -580,7 +618,7 @@ export default function App() {
   const handleConfirmMeeting = async (meetingId, isConfirmed) => {
     try {
       bridge.haptic('medium');
-      const activeWs = scope.workspaceId;
+      const activeWs = scope?.workspaceId || ctx?.workspaceId;
       if (!activeWs) return;
 
       const { data: meeting, error: meetErr } = await db
@@ -648,16 +686,8 @@ export default function App() {
     }
   };
 
-  const handleSendChatMessage = async (requestId, content) => {
+  const handleSendChatMessage = async (id, content, isClub = false) => {
     if (!content.trim()) return;
-    const req = data.connectionRequests.find(r => r.id === requestId);
-    if (!req) return;
-
-    const currentMessages = [];
-    try {
-      const parsed = JSON.parse(req.chat_messages);
-      if (Array.isArray(parsed)) currentMessages.push(...parsed);
-    } catch { /* ignore */ }
 
     const newMessage = {
       id: `msg-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
@@ -665,15 +695,235 @@ export default function App() {
       content: content.trim(),
       timestamp: new Date().toISOString()
     };
-    const updatedMessages = [...currentMessages, newMessage];
 
+    if (isClub) {
+      const room = data.rooms.find(r => r.id === id);
+      if (!room) return;
+
+      const currentMessages = [];
+      try {
+        const parsed = JSON.parse(room.chat_messages);
+        if (Array.isArray(parsed)) currentMessages.push(...parsed);
+      } catch { /* ignore */ }
+
+      const updatedMessages = [...currentMessages, newMessage];
+      const updatedRoom = { ...room, chat_messages: JSON.stringify(updatedMessages) };
+
+      data.setRooms(data.rooms.map(r => r.id === id ? updatedRoom : r));
+      if (activeChatConnection?.id === id && activeChatConnection?.is_club) {
+        setActiveChatConnection(updatedRoom);
+      }
+
+      try {
+        await db
+          .from('rooms')
+          .update({ chat_messages: JSON.stringify(updatedMessages) })
+          .eq('id', id);
+      } catch (e) {
+        console.error('Failed to send group chat message:', e);
+        data.loadConnectionData();
+      }
+    } else {
+      const req = data.connectionRequests.find(r => r.id === id);
+      if (!req) return;
+
+      const currentMessages = [];
+      try {
+        const parsed = JSON.parse(req.chat_messages);
+        if (Array.isArray(parsed)) currentMessages.push(...parsed);
+      } catch { /* ignore */ }
+
+      const updatedMessages = [...currentMessages, newMessage];
+      const updatedReq = { ...req, chat_messages: JSON.stringify(updatedMessages) };
+
+      data.setConnectionRequests(data.connectionRequests.map(r => r.id === id ? updatedReq : r));
+      if (activeChatConnection?.id === id && !activeChatConnection?.is_club) {
+        setActiveChatConnection(updatedReq);
+      }
+
+      try {
+        await db
+          .from('connection_requests')
+          .update({ chat_messages: JSON.stringify(updatedMessages) })
+          .eq('id', id);
+      } catch (e) {
+        console.error('Failed to send buddy chat message:', e);
+        data.loadConnectionData();
+      }
+    }
+  };
+
+  const handleCreateCommunity = async (payload, invitedUserIds = []) => {
     try {
-      await db
-        .from('connection_requests')
-        .update({ chat_messages: JSON.stringify(updatedMessages) })
-        .eq('id', requestId);
+      bridge.haptic('medium');
+      const activeWs = scope?.workspaceId || ctx?.workspaceId;
+      if (!activeWs) return;
+
+      const { data: newRoom, error } = await db
+        .from('rooms')
+        .insert({
+          workspace_id: activeWs,
+          host_id: ctx.userId,
+          child_code: payload.child_code,
+          location: payload.location,
+          is_club: true,
+          club_name: payload.club_name,
+          club_description: payload.club_description,
+          status: 'open',
+          chat_messages: JSON.stringify([])
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      const ids = Array.isArray(invitedUserIds) ? invitedUserIds : [];
+      if (ids.length > 0 && newRoom) {
+        const inserts = ids.map(receiver_id => ({
+          workspace_id: activeWs,
+          room_id: newRoom.id,
+          receiver_id,
+          status: 'pending'
+        }));
+        const { error: invErr } = await db.from('invitations').insert(inserts);
+        if (invErr) throw invErr;
+
+        try {
+          await mushyApi.push({
+            workspaceId: activeWs,
+            appSlug: 'buddy-connect',
+            userIds: ids,
+            title: '👥 Lời mời vào Cộng đồng!',
+            body: `${ctx.userFullName || 'Một đồng nghiệp'} đã mời bạn tham gia cộng đồng "${payload.club_name}".`,
+          });
+        } catch (pushErr) {
+          console.warn('Lỗi push notification:', pushErr);
+        }
+      }
+
+      await dialog.success('Thành công!', `Cộng đồng "${payload.club_name}" đã được tạo${ids.length > 0 ? ` và đã mời ${ids.length} thành viên` : ''}.`);
+      data.loadConnectionData();
     } catch (e) {
-      console.error('Failed to send buddy chat message:', e);
+      dialog.error('Lỗi tạo cộng đồng', e.message);
+    }
+  };
+
+  const handleUpgradeToCommunity = async (connectionId, clubName) => {
+    try {
+      bridge.haptic('medium');
+      const activeWs = scope?.workspaceId || ctx?.workspaceId;
+      if (!activeWs) return;
+
+      const req = data.connectionRequests.find(r => r.id === connectionId);
+      if (!req) return;
+
+      const buddyId = req.from_user_id === ctx.userId ? req.to_user_id : req.from_user_id;
+
+      const { data: newRoom, error: roomErr } = await db
+        .from('rooms')
+        .insert({
+          workspace_id: activeWs,
+          host_id: ctx.userId,
+          child_code: req.action_type || 'casual',
+          location: 'Văn phòng',
+          is_club: true,
+          club_name: clubName,
+          club_description: 'Cộng đồng được nâng cấp từ trò chuyện kết nối 1-1.',
+          status: 'open',
+          chat_messages: req.chat_messages || JSON.stringify([])
+        })
+        .select()
+        .single();
+
+      if (roomErr) throw roomErr;
+
+      const { error: invErr } = await db
+        .from('invitations')
+        .insert({
+          workspace_id: activeWs,
+          room_id: newRoom.id,
+          receiver_id: buddyId,
+          status: 'accepted'
+        });
+
+      if (invErr) throw invErr;
+
+      await dialog.success('Đã nâng cấp!', 'Đã nâng cấp trò chuyện thành Cộng đồng mới.');
+      setActiveChatConnection(null);
+
+      setTimeout(() => {
+        setActiveChatConnection(newRoom);
+      }, 500);
+
+      data.loadData(true);
+    } catch (e) {
+      dialog.error('Lỗi nâng cấp cộng đồng', e.message);
+    }
+  };
+
+  const handleInviteToCommunity = async (roomId, receiverIds) => {
+    try {
+      bridge.haptic('medium');
+      const activeWs = scope?.workspaceId || ctx?.workspaceId;
+      if (!activeWs) return;
+
+      const room = data.rooms.find(r => r.id === roomId);
+      if (!room) return;
+
+      const ids = Array.isArray(receiverIds) ? receiverIds : [receiverIds];
+      if (ids.length === 0) return;
+
+      const existingInvs = data.invitations.filter(i => i.room_id === roomId && i.status === 'pending');
+      const newIds = ids.filter(id => !existingInvs.some(i => i.receiver_id === id));
+
+      if (newIds.length === 0) {
+        return dialog.error('Đã mời', 'Tất cả đồng nghiệp được chọn đã có lời mời đang chờ.');
+      }
+
+      const inserts = newIds.map(receiver_id => ({
+        workspace_id: activeWs,
+        room_id: roomId,
+        receiver_id,
+        status: 'pending'
+      }));
+
+      const { error } = await db.from('invitations').insert(inserts);
+      if (error) throw error;
+
+      try {
+        await mushyApi.push({
+          workspaceId: activeWs,
+          appSlug: 'buddy-connect',
+          userIds: newIds,
+          title: '👥 Lời mời vào Cộng đồng!',
+          body: `${ctx.userFullName || 'Một đồng nghiệp'} đã mời bạn tham gia cộng đồng "${room.club_name}".`,
+        });
+      } catch (pushErr) {
+        console.warn('Lỗi push notification:', pushErr);
+      }
+
+      data.loadConnectionData();
+    } catch (e) {
+      dialog.error('Lỗi mời thành viên', e.message);
+    }
+  };
+
+  const handleRespondInvitation = async (invitationId, status) => {
+    try {
+      bridge.haptic('medium');
+      const activeWs = scope?.workspaceId || ctx?.workspaceId;
+      if (!activeWs) return;
+
+      const { error } = await db
+        .from('invitations')
+        .update({ status, updated_at: new Date().toISOString() })
+        .eq('id', invitationId);
+
+      if (error) throw error;
+
+      data.loadConnectionData();
+    } catch (e) {
+      dialog.error('Lỗi phản hồi lời mời', e.message);
     }
   };
 
@@ -751,7 +1001,7 @@ export default function App() {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${ctx.token}`,
-          'X-Workspace-Id': scope.workspaceId,
+          'X-Workspace-Id': scope?.workspaceId || ctx?.workspaceId,
           'X-Home-Workspace-Id': ctx.workspaceId,
         },
         body: JSON.stringify({
@@ -791,7 +1041,7 @@ export default function App() {
     if (!ok) return;
 
     try {
-      const activeWs = scope.workspaceId;
+      const activeWs = scope?.workspaceId || ctx?.workspaceId;
 
       await db.from('user_profiles').delete().eq('workspace_id', activeWs).eq('user_id', ctx.userId);
       await db.from('user_tags').delete().eq('workspace_id', activeWs).eq('user_id', ctx.userId);
@@ -974,7 +1224,8 @@ export default function App() {
   // ─── Main UI ─────────────────────────────────────────────────────────────
 
   return (
-    <div className="mushy-page">
+    <>
+      <div className="mushy-page">
       {/* Header */}
       <header className="app-header">
         <div className="brand-section">
@@ -1033,10 +1284,15 @@ export default function App() {
           {activeTab === 'inbox' && (
             <InboxScreen
               connectionRequests={data.connectionRequests}
+              invitations={data.invitations}
+              rooms={data.rooms}
               members={data.members}
               allProfiles={data.allProfiles}
               ctx={ctx}
               onRespond={handleRespondRequest}
+              onRespondInvitation={handleRespondInvitation}
+              onDeleteRequest={handleDeleteConnectionRequest}
+              onDeleteInvitation={handleDeleteInvitation}
             />
           )}
 
@@ -1046,6 +1302,8 @@ export default function App() {
               myProfile={data.myProfile}
               connectionMeetings={data.connectionMeetings}
               connectionRequests={data.connectionRequests}
+              rooms={data.rooms}
+              invitations={data.invitations}
               members={data.members}
               allProfiles={data.allProfiles}
               allPoints={data.allPoints}
@@ -1055,6 +1313,8 @@ export default function App() {
               onOpenChat={setActiveChatConnection}
               onOpenInvite={() => openInviteFor()}
               onOpenSharing={handleOpenSharing}
+              onCreateCommunityClick={() => setShowCreateCommunityModal(true)}
+              onDeleteConnectionRequest={handleDeleteConnectionRequest}
             />
           )}
 
@@ -1095,6 +1355,7 @@ export default function App() {
       {showInviteModal && (
         <InviteModal
           members={data.members}
+          allProfiles={data.allProfiles}
           selectedUserIds={inviteSelectedUserIds}
           setSelectedUserIds={setInviteSelectedUserIds}
           inviteType={inviteType}
@@ -1113,6 +1374,16 @@ export default function App() {
             setInviteLocation('');
             setInviteMessage('');
           }}
+        />
+      )}
+
+      {showCreateCommunityModal && (
+        <CreateCommunityModal
+          members={data.members}
+          allProfiles={data.allProfiles}
+          ctx={ctx}
+          onCreate={handleCreateCommunity}
+          onClose={() => setShowCreateCommunityModal(false)}
         />
       )}
 
@@ -1149,37 +1420,111 @@ export default function App() {
         </div>
       )}
 
-      {showSharingModal && (
-        <SharingModal
-          open={showSharingModal}
-          onClose={() => setShowSharingModal(false)}
-          isAnyAdmin={isAnyAdmin}
-          shareCodeInput={shareCodeInput}
-          setShareCodeInput={setShareCodeInput}
-          generatedCode={generatedCode}
-          onGenerateCode={handleGenerateCode}
-          onRedeemCode={handleRedeemCode}
-          shareGrants={shareGrants}
-          onRevokeGrant={handleRevokeGrant}
-          loadingGrants={loadingGrants}
-        />
-      )}
-
-      {showShareManageModal && (
-        <ShareManageModal open={showShareManageModal} onClose={() => setShowShareManageModal(false)} />
-      )}
-
-      {activeChatConnection && (
-        <ChatModal
-          connection={activeChatConnection}
-          members={data.members}
-          ctx={ctx}
-          onClose={() => setActiveChatConnection(null)}
-          onSend={handleSendChatMessage}
-        />
-      )}
     </div>
-  );
+
+    {/* Modals rendered outside of .mushy-page to escape any stacking context or container layouts */}
+    {showConnectSheet && selectedConnectBuddy && (
+      <QuickConnectSheet
+        buddy={selectedConnectBuddy}
+        myProfile={data.myProfile}
+        allProfiles={data.allProfiles}
+        onClose={() => { setShowConnectSheet(false); setSelectedConnectBuddy(null); }}
+        onSendRequest={(buddyId, type) => handleSendConnectionRequest(buddyId, type, getConnectTypeTemplate(type))}
+        icebreakerMsg={icebreakerMsg}
+        loadingIcebreaker={loadingIcebreaker}
+        onGetIcebreaker={handleGetIcebreaker}
+      />
+    )}
+
+    {showInviteModal && (
+      <InviteModal
+        members={data.members}
+        allProfiles={data.allProfiles}
+        selectedUserIds={inviteSelectedUserIds}
+        setSelectedUserIds={setInviteSelectedUserIds}
+        inviteType={inviteType}
+        setInviteType={setInviteType}
+        inviteTime={inviteTime}
+        setInviteTime={setInviteTime}
+        inviteLocation={inviteLocation}
+        setInviteLocation={setInviteLocation}
+        inviteMessage={inviteMessage}
+        setInviteMessage={setInviteMessage}
+        onSend={handleSendGroupInvitation}
+        onClose={() => {
+          setShowInviteModal(false);
+          setInviteSelectedUserIds([]);
+          setInviteTime('');
+          setInviteLocation('');
+          setInviteMessage('');
+        }}
+      />
+    )}
+
+    {showCreateCommunityModal && (
+      <CreateCommunityModal
+        members={data.members}
+        allProfiles={data.allProfiles}
+        ctx={ctx}
+        onCreate={handleCreateCommunity}
+        onClose={() => setShowCreateCommunityModal(false)}
+      />
+    )}
+
+    {showProfileModal && (
+      <ProfileModal
+        open={showProfileModal}
+        onClose={() => setShowProfileModal(false)}
+        myProfile={data.myProfile}
+        setMyProfile={data.setMyProfile}
+        mySkills={data.mySkills}
+        setMySkills={data.setMySkills}
+        myGoals={data.myGoals}
+        setMyGoals={data.setMyGoals}
+        myTags={data.myTags}
+        setMyTags={data.setMyTags}
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+        expandedParents={expandedParents}
+        setExpandedParents={setExpandedParents}
+        onSave={handleSaveProfile}
+      />
+    )}
+
+    {showSharingModal && (
+      <SharingModal
+        open={showSharingModal}
+        onClose={() => setShowSharingModal(false)}
+        isAnyAdmin={isAnyAdmin}
+        shareCodeInput={shareCodeInput}
+        setShareCodeInput={setShareCodeInput}
+        generatedCode={generatedCode}
+        onGenerateCode={handleGenerateCode}
+        onRedeemCode={handleRedeemCode}
+        shareGrants={shareGrants}
+        onRevokeGrant={handleRevokeGrant}
+        loadingGrants={loadingGrants}
+      />
+    )}
+
+    {showShareManageModal && (
+      <ShareManageModal open={showShareManageModal} onClose={() => setShowShareManageModal(false)} />
+    )}
+
+    {activeChatConnection && (
+      <ChatModal
+        connection={activeChatConnection}
+        members={data.members}
+        ctx={ctx}
+        invitations={data.invitations}
+        onClose={() => setActiveChatConnection(null)}
+        onSend={handleSendChatMessage}
+        onUpgradeToCommunity={handleUpgradeToCommunity}
+        onInviteMembers={handleInviteToCommunity}
+      />
+    )}
+  </>
+);
 }
 
 function TabButton({ active, onClick, icon, label, badge }) {

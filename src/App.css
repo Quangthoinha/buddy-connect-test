@@ -1921,6 +1921,35 @@ input[type="datetime-local"] {
   box-shadow: 0 12px 30px rgba(13, 148, 136, 0.08) !important;
 }
 
+/* Premium styled select box to remove system default black borders and native arrows */
+select.mushy-input {
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  appearance: none !important;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3E%3C/svg%3E") !important;
+  background-position: right 12px center !important;
+  background-repeat: no-repeat !important;
+  background-size: 16px !important;
+  padding-right: 32px !important;
+}
+
+/* Custom reset to eliminate native black borders, shadows, and default outlines on all input/select/textarea elements */
+input.mushy-input,
+select.mushy-input,
+textarea.mushy-input {
+  border: 1.5px solid var(--hairline) !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+input.mushy-input:focus,
+select.mushy-input:focus,
+textarea.mushy-input:focus {
+  border-color: var(--brand) !important;
+  outline: none !important;
+  box-shadow: 0 0 0 3px rgba(230, 57, 70, 0.12) !important;
+}
+
 
 
 

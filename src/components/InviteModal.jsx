@@ -1,9 +1,11 @@
 import React from 'react';
 import { bridge } from '../lib/bridge.js';
-import { getConnectTypeLabel, getConnectTypeTemplate } from '../lib/app/connect.js';
+import { getConnectTypeLabel, getConnectTypeTemplate, formatName } from '../lib/app/connect.js';
+import { getAvatarGradient } from '../lib/app/avatar.js';
 
 export default function InviteModal({
   members,
+  allProfiles = {},
   selectedUserIds,
   setSelectedUserIds,
   inviteType,
@@ -19,7 +21,11 @@ export default function InviteModal({
 }) {
   const [searchQuery, setSearchQuery] = React.useState('');
 
-  const filteredMembers = members.filter(m => m.full_name.toLowerCase().includes(searchQuery.toLowerCase()));
+  const filteredMembers = members.filter(m => {
+    const name = m.full_name?.trim();
+    if (!name || name === '.') return false;
+    return name.toLowerCase().includes(searchQuery.toLowerCase());
+  });
 
   function toggleUser(userId) {
     setSelectedUserIds(prev =>
@@ -39,7 +45,7 @@ export default function InviteModal({
     <div className="modal-scrim dialog-scrim animated-fade-in" onClick={onClose}>
       <div
         className="modal-card dialog-card form-slide-down"
-        style={{ maxWidth: 440, textAlign: 'left', display: 'flex', flexDirection: 'column', maxHeight: '95dvh' }}
+        style={{ maxWidth: 440, textAlign: 'left', display: 'flex', flexDirection: 'column', maxHeight: '85dvh', overflow: 'hidden' }}
         onClick={(e) => e.stopPropagation()}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, borderBottom: '1px solid var(--hairline)', paddingBottom: 10 }}>
@@ -73,7 +79,7 @@ export default function InviteModal({
                       style={{ padding: '3px 8px', fontSize: '11px', borderRadius: '8px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                       onClick={() => toggleUser(uid)}
                     >
-                      {m.full_name} ✕
+                      {formatName(m.full_name)} ✕
                     </span>
                   );
                 })}
@@ -90,41 +96,80 @@ export default function InviteModal({
             />
 
             <div style={{
-              maxHeight: '120px',
+              maxHeight: '180px',
               overflowY: 'auto',
-              border: '1.5px solid var(--hairline)',
-              borderRadius: '12px',
-              padding: '8px',
+              border: '1px solid var(--hairline)',
+              borderRadius: '16px',
+              padding: '6px',
               display: 'flex',
               flexDirection: 'column',
-              gap: '6px',
+              gap: '4px',
               background: '#F8FAFC'
             }}>
               {filteredMembers.map(m => {
-                const isChecked = selectedUserIds.includes(m.user_id);
+                const isSelected = selectedUserIds.includes(m.user_id);
+                const prof = allProfiles[m.user_id] || {};
+                const name = formatName(m.full_name);
                 return (
-                  <label
+                  <div
                     key={m.user_id}
+                    onClick={() => toggleUser(m.user_id)}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
-                      gap: '8px',
-                      fontSize: '12.5px',
+                      justifyContent: 'space-between',
+                      padding: '8px 12px',
+                      borderRadius: '12px',
+                      background: isSelected ? 'var(--brand-soft)' : 'transparent',
+                      border: `1px solid ${isSelected ? 'rgba(230, 57, 70, 0.15)' : 'transparent'}`,
                       cursor: 'pointer',
-                      padding: '4px 6px',
-                      borderRadius: '6px',
-                      background: isChecked ? 'rgba(230, 57, 70, 0.04)' : 'transparent',
-                      transition: 'background 0.2s'
+                      transition: 'all 0.2s ease-in-out'
                     }}
                   >
-                    <input
-                      type="checkbox"
-                      checked={isChecked}
-                      onChange={() => toggleUser(m.user_id)}
-                      style={{ accentColor: 'var(--brand)', cursor: 'pointer' }}
-                    />
-                    <span>{m.full_name}</span>
-                  </label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1 }}>
+                      <div style={{
+                        width: '32px',
+                        height: '32px',
+                        borderRadius: '50%',
+                        background: getAvatarGradient(name.charAt(0)),
+                        color: '#fff',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '12px',
+                        fontWeight: 'bold',
+                        flexShrink: 0
+                      }}>
+                        {name.charAt(0)}
+                      </div>
+                      <div style={{ textAlign: 'left', minWidth: 0, flex: 1 }}>
+                        <div style={{ fontSize: '13px', fontWeight: '700', color: isSelected ? 'var(--brand)' : 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {name}
+                        </div>
+                        <div style={{ fontSize: '11px', color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {prof.department || 'Đồng nghiệp'} · {prof.facility || 'Cơ sở'}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div style={{
+                      width: '20px',
+                      height: '20px',
+                      borderRadius: '50%',
+                      border: `1.5px solid ${isSelected ? 'var(--brand)' : 'rgba(0,0,0,0.12)'}`,
+                      background: isSelected ? 'var(--brand)' : 'transparent',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#fff',
+                      fontSize: '11px',
+                      fontWeight: 'bold',
+                      flexShrink: 0,
+                      transition: 'all 0.2s'
+                    }}>
+                      {isSelected ? '✓' : ''}
+                    </div>
+                  </div>
                 );
               })}
             </div>

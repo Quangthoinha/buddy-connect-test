@@ -41,3 +41,48 @@ export function formatTime(isoString) {
   const date = new Date(isoString);
   return `${date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} ngày ${date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}`;
 }
+
+const EXPIRE_DAYS = 7;
+
+export function isConnectionExpired(req) {
+  if (!req || req.status !== 'pending') return false;
+  const now = Date.now();
+
+  // Nếu có thời gian hẹn trong message_template, quá hạn khi đã qua thời gian đó
+  if (req.message_template) {
+    try {
+      const parsed = JSON.parse(req.message_template);
+      if (parsed.time) {
+        const scheduledTime = new Date(parsed.time).getTime();
+        if (!isNaN(scheduledTime) && scheduledTime < now) return true;
+      }
+    } catch {
+      // ignore parse error
+    }
+  }
+
+  // Fallback: quá 7 ngày kể từ khi tạo
+  const created = new Date(req.created_at).getTime();
+  return !isNaN(created) && (now - created > EXPIRE_DAYS * 24 * 60 * 60 * 1000);
+}
+
+export function isInvitationExpired(inv, room) {
+  if (!inv || inv.status !== 'pending') return false;
+  const now = Date.now();
+
+  // Với phòng đi chung, quá hạn khi scheduled_at đã qua
+  if (room && !room.is_club && room.scheduled_at) {
+    const scheduledTime = new Date(room.scheduled_at).getTime();
+    if (!isNaN(scheduledTime) && scheduledTime < now) return true;
+  }
+
+  // Fallback: quá 7 ngày kể từ khi tạo
+  const created = new Date(inv.created_at).getTime();
+  return !isNaN(created) && (now - created > EXPIRE_DAYS * 24 * 60 * 60 * 1000);
+}
+export function formatName(name) {
+  if (!name || typeof name !== 'string') return 'Đồng nghiệp';
+  const trimmed = name.trim();
+  if (trimmed === '.' || trimmed === '') return 'Đồng nghiệp';
+  return trimmed;
+}

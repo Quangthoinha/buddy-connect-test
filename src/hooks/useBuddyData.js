@@ -37,6 +37,8 @@ export function useBuddyData() {
   const [connectionMeetings, setConnectionMeetings] = useState([]);
   const [myPoints, setMyPoints] = useState({ points: 0, confirmed_1to1_count: 0, helper_badge_level: null });
   const [allPoints, setAllPoints] = useState([]);
+  const [rooms, setRooms] = useState([]);
+  const [invitations, setInvitations] = useState([]);
 
   const activeWs = scope?.workspaceId;
 
@@ -84,6 +86,22 @@ export function useBuddyData() {
         .order('points', { ascending: false });
       if (allPtsErr) console.error('Error fetching leaderboard points:', allPtsErr);
       else setAllPoints(allPts || []);
+
+      const { data: rms, error: rmsErr } = await db
+        .from('rooms')
+        .select('*')
+        .eq('workspace_id', activeWs)
+        .order('created_at', { ascending: false });
+      if (rmsErr) console.error('Error fetching rooms:', rmsErr);
+      else setRooms(rms || []);
+
+      const { data: invs, error: invsErr } = await db
+        .from('invitations')
+        .select('*')
+        .eq('workspace_id', activeWs)
+        .order('created_at', { ascending: false });
+      if (invsErr) console.error('Error fetching invitations:', invsErr);
+      else setInvitations(invs || []);
     } catch (err) {
       console.warn('Lỗi tải dữ liệu Connection:', err);
     }
@@ -190,11 +208,15 @@ export function useBuddyData() {
     const unsubConnReqs = subscribeToTable('connection_requests', activeWs, () => loadConnectionData());
     const unsubConnMeets = subscribeToTable('connection_meetings', activeWs, () => loadConnectionData());
     const unsubConnPoints = subscribeToTable('connection_points', activeWs, () => loadConnectionData());
+    const unsubRooms = subscribeToTable('rooms', activeWs, () => loadConnectionData());
+    const unsubInvs = subscribeToTable('invitations', activeWs, () => loadConnectionData());
 
     return () => {
       unsubConnReqs();
       unsubConnMeets();
       unsubConnPoints();
+      unsubRooms();
+      unsubInvs();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeWs]);
@@ -214,6 +236,8 @@ export function useBuddyData() {
     connectionMeetings,
     myPoints,
     allPoints,
+    rooms,
+    invitations,
     loadData,
     loadConnectionData,
     // Expose setters for components that mutate state directly
@@ -231,5 +255,7 @@ export function useBuddyData() {
     setConnectionMeetings,
     setMyPoints,
     setAllPoints,
+    setRooms,
+    setInvitations,
   };
 }

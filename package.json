@@ -10,7 +10,8 @@
     "dev:setup": "node scripts/setup.js",
     "dev:seed": "node scripts/seed.js",
     "dev:seed-connect": "node scripts/seed_connect.js",
-    "dev:token": "node scripts/refresh-token.js"
+    "dev:token": "node scripts/refresh-token.js",
+    "dev:test-insert": "node scratch/test_insert.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
