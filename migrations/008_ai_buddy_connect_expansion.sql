@@ -1,5 +1,5 @@
 -- =====================================================================
--- Migration 006: AI Buddy Connect Expansion Schema
+-- Migration 008: AI Buddy Connect Expansion Schema
 -- Slug = "buddy-connect" → schema = `app_buddy_connect`
 -- =====================================================================
 
