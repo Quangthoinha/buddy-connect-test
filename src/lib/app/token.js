@@ -1,9 +1,9 @@
 // App-specific token refresh helper.
 // Không sửa shared infra (context.js / supabase.js) — chỉ dùng API công khai của chúng.
 
-import { getContext } from '../lib/context.js';
-import { bridge } from '../lib/bridge.js';
-import { resetSupabaseClients } from '../lib/supabase.js';
+import { getContext } from '../context.js';
+import { bridge } from '../bridge.js';
+import { resetSupabaseClients } from '../supabase.js';
 
 const REFRESH_BUFFER_MS = 5 * 60 * 1000; // refresh nếu còn < 5 phút
 
