@@ -19,7 +19,6 @@ export default function ConnectionsScreen({
   onConfirmMeeting,
   onOpenChat,
   onOpenInvite,
-  onOpenSharing,
   onCreateCommunityClick,
   onDeleteConnectionRequest
 }) {
@@ -160,7 +159,6 @@ export default function ConnectionsScreen({
         allPoints={allPoints}
         members={members}
         ctx={ctx}
-        onOpenSharing={onOpenSharing}
       />
     </div>
   );
@@ -901,21 +899,13 @@ function Outbox({ outbox, members, allProfiles, ctx, onDelete }) {
   );
 }
 
-function Leaderboard({ allPoints, members, ctx, onOpenSharing }) {
+function Leaderboard({ allPoints, members, ctx }) {
   return (
     <section>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '0 0 10px 6px' }}>
+      <div style={{ margin: '0 0 10px 6px' }}>
         <h4 className="chip-group-title" style={{ margin: 0 }}>
           🏆 Bảng xếp hạng Connect
         </h4>
-        <button
-          type="button"
-          className="mushy-btn mushy-btn--ghost"
-          style={{ minHeight: '26px', height: '26px', fontSize: '10.5px', padding: '0 8px', margin: 0, borderRadius: '6px' }}
-          onClick={() => { bridge.haptic('light'); onOpenSharing?.(); }}
-        >
-          ⇆ Liên-Workspace
-        </button>
       </div>
 
       <div className="mushy-card" style={{ padding: '10px 14px', borderRadius: '20px' }}>
