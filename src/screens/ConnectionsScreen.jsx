@@ -274,7 +274,7 @@ function PendingMeetings({ meetings, connectionRequests, members, ctx, onConfirm
                 <span style={{ fontSize: '32px' }}>☕</span>
                 <div style={{ flex: 1, textAlign: 'left' }}>
                   <h5 style={{ margin: '0 0 4px', fontSize: '13.5px', fontWeight: '800', color: '#1F2937' }}>
-                    Bạn và {formatName(buddy.full_name)} đã gặp nhau chưa?
+                    Bạn và {formatName(buddy)} đã gặp nhau chưa?
                   </h5>
                   <p style={{ margin: 0, fontSize: '11.5px', color: '#4B5563', lineHeight: '1.4' }}>
                     Hình thức: <strong>{typeLabel}</strong>. {req?.action_type === 'intro_meet' ? 'Xác nhận gặp để nhận ngay 15 điểm thưởng nhân viên mới! 🌟' : 'Xác nhận gặp để nhận ngay 10 điểm kết nối!'}
@@ -383,7 +383,7 @@ function BuddyHelperDashboard({ ctx, members, allProfiles, connectionRequests, h
               }}>
                 <div style={{ textAlign: 'left' }}>
                   <div style={{ fontSize: '13px', fontWeight: '700', color: '#1F2937' }}>
-                    👶 {formatName(newbie.full_name)}
+                    👶 {formatName(newbie)}
                   </div>
                   <div style={{ fontSize: '11px', color: '#6B7280', marginTop: '2px' }}>
                     🏢 {newbieProf.department || 'Phòng ban'} · {statusLabel}
@@ -436,6 +436,18 @@ function BuddyHelperDashboard({ ctx, members, allProfiles, connectionRequests, h
 }
 
 function ActiveConnections({ connections, members, allProfiles, ctx, invitations, onChat, filter, onFilterChange }) {
+  const [currentPage, setCurrentPage] = React.useState(1);
+  const pageSize = 5;
+
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [filter, connections.length]);
+
+  const totalConnections = connections.length;
+  const totalPages = Math.ceil(totalConnections / pageSize);
+  const startIndex = (currentPage - 1) * pageSize;
+  const paginatedConnections = connections.slice(startIndex, startIndex + pageSize);
+
   return (
     <section>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', margin: '0 0 10px 6px' }}>
@@ -472,7 +484,7 @@ function ActiveConnections({ connections, members, allProfiles, ctx, invitations
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {connections.map(conn => {
+          {paginatedConnections.map(conn => {
             if (conn.connType === '1to1') {
               const buddyId = conn.from_user_id === ctx.userId ? conn.to_user_id : conn.from_user_id;
               const buddy = members.find(m => m.user_id === buddyId) || { full_name: 'Đồng nghiệp' };
@@ -484,12 +496,12 @@ function ActiveConnections({ connections, members, allProfiles, ctx, invitations
               return (
                 <div key={`1to1-${conn.id}`} className="buddy-card-compact" style={{ padding: '14px 16px', margin: 0 }}>
                   <div className="buddy-card-main">
-                    <div className="buddy-avatar-compact" style={{ background: getAvatarGradient(formatName(buddy.full_name).charAt(0)) }}>
-                      <span style={{ color: '#fff', fontWeight: 'bold' }}>{formatName(buddy.full_name).charAt(0)}</span>
+                    <div className="buddy-avatar-compact" style={{ background: getAvatarGradient(formatName(buddy).charAt(0)) }}>
+                      <span style={{ color: '#fff', fontWeight: 'bold' }}>{formatName(buddy).charAt(0)}</span>
                     </div>
                     <div className="buddy-body-compact" style={{ textAlign: 'left' }}>
                       <div className="buddy-header-row">
-                        <h4 className="buddy-name-compact">{formatName(buddy.full_name)}</h4>
+                        <h4 className="buddy-name-compact">{formatName(buddy)}</h4>
                         <span style={{
                           fontSize: '10px',
                           fontWeight: '700',
@@ -583,7 +595,7 @@ function ActiveConnections({ connections, members, allProfiles, ctx, invitations
                         </span>
                       </div>
                       <div className="buddy-meta-row" style={{ marginTop: '2px' }}>
-                        <span className="buddy-dept">Host: {formatName(hostObj.full_name)}</span>
+                        <span className="buddy-dept">Host: {formatName(hostObj)}</span>
                         <span className="buddy-dot-separator">·</span>
                         <span className="buddy-facility">📍 {conn.location}</span>
                       </div>
@@ -669,7 +681,7 @@ function ActiveConnections({ connections, members, allProfiles, ctx, invitations
                         {conn.club_description || 'Cộng đồng giao lưu, chia sẻ.'}
                       </p>
                       <div className="buddy-meta-row" style={{ marginTop: '4px' }}>
-                        <span className="buddy-dept">Mở bởi: {formatName(hostObj.full_name)}</span>
+                        <span className="buddy-dept">Mở bởi: {formatName(hostObj)}</span>
                         <span className="buddy-dot-separator">·</span>
                         <span className="buddy-facility">👥 {memberCount} thành viên</span>
                       </div>
@@ -728,6 +740,69 @@ function ActiveConnections({ connections, members, allProfiles, ctx, invitations
           })}
         </div>
       )}
+
+      {totalPages > 1 && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '12px',
+          marginTop: '18px',
+          marginBottom: '10px'
+        }}>
+          <button
+            type="button"
+            disabled={currentPage === 1}
+            onClick={() => {
+              bridge.haptic('light');
+              setCurrentPage(prev => Math.max(prev - 1, 1));
+            }}
+            style={{
+              padding: '6px 14px',
+              borderRadius: '16px',
+              border: '1px solid var(--hairline)',
+              background: currentPage === 1 ? 'rgba(0,0,0,0.02)' : '#fff',
+              color: currentPage === 1 ? 'var(--muted)' : 'var(--ink)',
+              fontSize: '12px',
+              fontWeight: '700',
+              cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
+              transition: 'all 0.2s ease',
+              opacity: currentPage === 1 ? 0.6 : 1,
+              boxShadow: currentPage === 1 ? 'none' : '0 2px 6px rgba(0,0,0,0.05)'
+            }}
+          >
+            Trước
+          </button>
+
+          <span style={{ fontSize: '12.5px', color: 'var(--muted)', fontWeight: 600 }}>
+            Trang <strong>{currentPage}</strong> / {totalPages}
+          </span>
+
+          <button
+            type="button"
+            disabled={currentPage === totalPages}
+            onClick={() => {
+              bridge.haptic('light');
+              setCurrentPage(prev => Math.min(prev + 1, totalPages));
+            }}
+            style={{
+              padding: '6px 14px',
+              borderRadius: '16px',
+              border: '1px solid var(--hairline)',
+              background: currentPage === totalPages ? 'rgba(0,0,0,0.02)' : '#fff',
+              color: currentPage === totalPages ? 'var(--muted)' : 'var(--ink)',
+              fontSize: '12px',
+              fontWeight: '700',
+              cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
+              transition: 'all 0.2s ease',
+              opacity: currentPage === totalPages ? 0.6 : 1,
+              boxShadow: currentPage === totalPages ? 'none' : '0 2px 6px rgba(0,0,0,0.05)'
+            }}
+          >
+            Sau
+          </button>
+        </div>
+      )}
     </section>
   );
 }
@@ -767,7 +842,7 @@ function Outbox({ outbox, members, allProfiles, ctx, onDelete }) {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                   <div style={{ textAlign: 'left', minWidth: 0, flex: 1 }}>
                     <div style={{ fontSize: '13px', fontWeight: '700', color: expired ? '#9CA3AF' : 'var(--ink)' }}>
-                      Gửi tới: {formatName(buddy.full_name)}
+                      Gửi tới: {formatName(buddy)}
                     </div>
                     <div style={{ fontSize: '10.5px', color: expired ? '#9CA3AF' : 'var(--muted)', marginTop: '2px' }}>
                       Hình thức: <strong>{typeLabel}</strong> · Trạng thái: {' '}
@@ -879,7 +954,7 @@ function Leaderboard({ allPoints, members, ctx, onOpenSharing }) {
                       width: '28px',
                       height: '28px',
                       borderRadius: '50%',
-                      background: getAvatarGradient((isMe ? 'Bạn' : formatName(userObj.full_name)).charAt(0)),
+                      background: getAvatarGradient((isMe ? 'Bạn' : formatName(userObj)).charAt(0)),
                       color: '#fff',
                       display: 'flex',
                       alignItems: 'center',
@@ -888,7 +963,7 @@ function Leaderboard({ allPoints, members, ctx, onOpenSharing }) {
                       fontWeight: 'bold',
                       flexShrink: 0
                     }}>
-                      {(isMe ? 'Bạn' : formatName(userObj.full_name)).charAt(0)}
+                      {(isMe ? 'Bạn' : formatName(userObj)).charAt(0)}
                     </div>
                     <div style={{ minWidth: 0, flex: 1, textAlign: 'left' }}>
                       <span style={{
@@ -900,7 +975,7 @@ function Leaderboard({ allPoints, members, ctx, onOpenSharing }) {
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap'
                       }}>
-                        {isMe ? 'Bạn' : formatName(userObj.full_name)} {isMe ? '(Tôi)' : ''}
+                        {isMe ? 'Bạn' : formatName(userObj)} {isMe ? '(Tôi)' : ''}
                       </span>
                       {row.helper_badge_level && (
                         <span style={{

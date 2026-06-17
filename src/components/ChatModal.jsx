@@ -48,7 +48,7 @@ export default function ChatModal({
   } else {
     const buddyId = connection.from_user_id === ctx.userId ? connection.to_user_id : connection.from_user_id;
     buddyMember = members.find(m => m.user_id === buddyId) || { full_name: 'Đồng nghiệp' };
-    chatTitle = `💬 Trò chuyện với ${formatName(buddyMember.full_name)}`;
+    chatTitle = `💬 Trò chuyện với ${formatName(buddyMember)}`;
     chatSub = `⚡ Hình thức: ${getConnectTypeLabel(connection.action_type)}`;
   }
 
@@ -61,7 +61,7 @@ export default function ChatModal({
 
   function handleUpgradeSubmit(e) {
     e.preventDefault();
-    const finalClubName = clubName.trim() || `Cộng đồng ${formatName(buddyMember?.full_name)}`;
+    const finalClubName = clubName.trim() || `Cộng đồng ${formatName(buddyMember)}`;
     onUpgradeToCommunity?.(connection.id, finalClubName);
     setShowUpgradeForm(false);
   }
@@ -114,7 +114,7 @@ export default function ChatModal({
                   borderRadius: '12px', background: 'var(--brand)', color: '#fff', border: 'none', fontWeight: 'bold'
                 }}
                 onClick={() => {
-                  setClubName(`Cộng đồng ${formatName(buddyMember?.full_name)}`);
+                  setClubName(`Cộng đồng ${formatName(buddyMember)}`);
                   setShowUpgradeForm(true);
                 }}
               >
@@ -161,7 +161,7 @@ export default function ChatModal({
               👥 Nâng cấp lên Cộng đồng
             </h3>
             <p style={{ fontSize: '12px', color: 'var(--muted)', margin: '0 0 16px', lineHeight: 1.45 }}>
-              Nâng cấp cuộc trò chuyện này thành một Cộng đồng (Câu lạc bộ) hoạt động lâu dài. Bạn và <strong>{formatName(buddyMember?.full_name)}</strong> sẽ tự động trở thành những thành viên đầu tiên, và bạn có thể rủ thêm nhiều đồng nghiệp khác tham gia!
+              Nâng cấp cuộc trò chuyện này thành một Cộng đồng (Câu lạc bộ) hoạt động lâu dài. Bạn và <strong>{formatName(buddyMember)}</strong> sẽ tự động trở thành những thành viên đầu tiên, và bạn có thể rủ thêm nhiều đồng nghiệp khác tham gia!
             </p>
             <form onSubmit={handleUpgradeSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div>
@@ -249,14 +249,14 @@ export default function ChatModal({
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left' }}>
                         <div style={{
                           width: '30px', height: '30px', borderRadius: '50%',
-                          background: getAvatarGradient(formatName(m.full_name).charAt(0)),
+                          background: getAvatarGradient(formatName(m).charAt(0)),
                           color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
                           fontSize: '11px', fontWeight: 'bold'
                         }}>
-                          {formatName(m.full_name).charAt(0)}
+                          {formatName(m).charAt(0)}
                         </div>
                         <div>
-                          <div style={{ fontSize: '13px', fontWeight: '700', color: 'var(--ink)' }}>{formatName(m.full_name)}</div>
+                          <div style={{ fontSize: '13px', fontWeight: '700', color: 'var(--ink)' }}>{formatName(m)}</div>
                           <div style={{ fontSize: '11px', color: 'var(--muted)' }}>{isSelected ? 'Đã chọn' : 'Bấm để chọn'}</div>
                         </div>
                       </div>
@@ -318,7 +318,7 @@ export default function ChatModal({
                 senderName = 'Bạn';
               } else {
                 const memberObj = members.find(m => m.user_id === msg.senderId);
-                senderName = memberObj ? formatName(memberObj.full_name) : 'Đồng nghiệp';
+                senderName = memberObj ? formatName(memberObj) : 'Đồng nghiệp';
               }
               const formattedTime = new Date(msg.timestamp).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
 

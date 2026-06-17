@@ -215,7 +215,7 @@ function PrimaryBuddyCard({ buddy, onScheduleMeet }) {
           width: '48px',
           height: '48px',
           borderRadius: '50%',
-          background: getAvatarGradient(formatName(member.full_name).charAt(0)),
+          background: getAvatarGradient(formatName(member).charAt(0)),
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -225,11 +225,11 @@ function PrimaryBuddyCard({ buddy, onScheduleMeet }) {
           boxShadow: '0 4px 10px rgba(217, 119, 6, 0.15)',
           flexShrink: 0
         }}>
-          {formatName(member.full_name).charAt(0)}
+          {formatName(member).charAt(0)}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <h4 style={{ margin: 0, fontSize: '14.5px', fontWeight: '800', color: '#1F2937' }}>
-            {formatName(member.full_name)}
+            {formatName(member)}
           </h4>
           <p style={{ margin: '2px 0 0', fontSize: '11.5px', color: '#4B5563' }}>
             🏢 {profile.department} · 📍 {profile.facility}
@@ -292,12 +292,12 @@ function BuddyCard({ candidate, myProfile, mySkills, myGoals, serverReasons, onO
     >
       <div className="buddy-card-main">
         <div className="buddy-avatar-compact">
-          <span>{formatName(member.full_name).charAt(0)}</span>
+          <span>{formatName(member).charAt(0)}</span>
         </div>
 
         <div className="buddy-body-compact">
           <div className="buddy-header-row">
-            <h4 className="buddy-name-compact">{formatName(member.full_name)}</h4>
+            <h4 className="buddy-name-compact">{formatName(member)}</h4>
             <span className={`buddy-match-badge ${matchScore >= 80 ? 'buddy-match-badge--premium' : ''}`}>
               {matchScore >= 80 ? '✨ ' : ''}{matchScore}% Match
             </span>
@@ -332,7 +332,7 @@ function BuddyCard({ candidate, myProfile, mySkills, myGoals, serverReasons, onO
                 className="buddy-tag-compact"
                 style={{ cursor: 'pointer' }}
                 onClick={(e) => { e.stopPropagation(); bridge.haptic('light'); onOpenInvite?.(); }}
-                title={`Rủ nhanh ${formatName(member.full_name)} cùng chơi ${tag.name}`}
+                title={`Rủ nhanh ${formatName(member)} cùng chơi ${tag.name}`}
               >
                 ❤️ {tag.name}
               </span>

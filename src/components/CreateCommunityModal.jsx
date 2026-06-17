@@ -131,7 +131,7 @@ export default function CreateCommunityModal({
                       style={{ padding: '3px 8px', fontSize: '11px', borderRadius: '8px', display: 'inline-flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}
                       onClick={() => toggleCommunityInvite(uid)}
                     >
-                      {formatName(m.full_name)} ✕
+                      {formatName(m)} ✕
                     </span>
                   );
                 })}
@@ -150,12 +150,15 @@ export default function CreateCommunityModal({
             }}>
               {members.filter(m => {
                 const name = m.full_name?.trim();
-                if (!name || name === '.') return false;
+                const hasValidName = name && name !== '.';
+                const email = m.work_email || m.personal_email;
+                const hasValidEmail = email && typeof email === 'string' && email.includes('@');
+                if (!hasValidName && !hasValidEmail) return false;
                 return m.user_id !== ctx.userId;
               }).map(m => {
                 const isSelected = communityInvitedIds.includes(m.user_id);
                 const prof = allProfiles?.[m.user_id] || {};
-                const name = formatName(m.full_name);
+                const name = formatName(m);
                 return (
                   <div
                     key={m.user_id}

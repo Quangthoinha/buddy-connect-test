@@ -14,7 +14,8 @@ import {
 import { useDialog } from './components/Dialog.jsx';
 import { mushyApi } from './lib/mushy-api.js';
 import { TAXONOMY } from './lib/app/taxonomy.jsx';
-import { getConnectTypeLabel, getConnectTypeTemplate, isConnectionExpired } from './lib/app/connect.js';
+import { getConnectTypeLabel, getConnectTypeTemplate, generateIcebreakerMessage, isConnectionExpired } from './lib/app/connect.js';
+import { ensureFreshToken } from './lib/app/token.js';
 
 // Hooks
 import { useBuddyData } from './hooks/useBuddyData.js';
@@ -96,10 +97,8 @@ export default function App() {
 
   const [activeChatConnection, setActiveChatConnection] = useState(null);
 
-  // AI
   const [serverMatchReasons, setServerMatchReasons] = useState({});
   const [icebreakerMsg, setIcebreakerMsg] = useState('');
-  const [loadingIcebreaker, setLoadingIcebreaker] = useState(false);
 
   // Reset pagination when filters / scope change
   useEffect(() => {
@@ -138,15 +137,17 @@ export default function App() {
   // Load server-side match reasons (non-blocking)
   async function loadServerMatchReasons() {
     try {
+      const freshCtx = await ensureFreshToken();
+      const activeWs = scope?.workspaceId || ctx?.workspaceId;
       const res = await fetch('/api/match', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${ctx.token}`,
-          'X-Workspace-Id': scope?.workspaceId || ctx?.workspaceId,
+          'Authorization': `Bearer ${freshCtx.token}`,
+          'X-Workspace-Id': activeWs,
           'X-Home-Workspace-Id': ctx.workspaceId,
         },
-        body: JSON.stringify({ userId: ctx.userId, workspaceId: scope?.workspaceId || ctx?.workspaceId }),
+        body: JSON.stringify({ userId: ctx.userId, workspaceId: activeWs }),
       });
       if (!res.ok) return;
       const result = await res.json();
@@ -175,6 +176,7 @@ export default function App() {
     }
 
     try {
+      await ensureFreshToken();
       bridge.haptic('medium');
       const activeWs = scope?.workspaceId || ctx?.workspaceId;
 
@@ -248,6 +250,7 @@ export default function App() {
 
   const handleGrantConsent = async () => {
     try {
+      await ensureFreshToken();
       bridge.haptic('medium');
       const activeWs = scope?.workspaceId || ctx?.workspaceId;
       if (!activeWs) return;
@@ -308,13 +311,21 @@ export default function App() {
     }
   };
 
+  const getBuddyName = (userId) => {
+    if (!userId) return 'các bạn';
+    const profile = data.allProfiles[userId];
+    if (profile?.full_name) return profile.full_name;
+    const member = data.members.find(m => m.user_id === userId);
+    return member?.full_name || 'bạn';
+  };
+
   const openInviteFor = (userId, type = 'food') => {
     bridge.haptic('light');
     setInviteSelectedUserIds(userId ? [userId] : []);
     setInviteType(type);
     setInviteTime('');
     setInviteLocation('');
-    setInviteMessage(getConnectTypeTemplate(type));
+    setInviteMessage(getConnectTypeTemplate(type, ctx.userFullName || 'Mình', getBuddyName(userId)));
     setShowInviteModal(true);
   };
 
@@ -324,7 +335,7 @@ export default function App() {
     setInviteType('intro_meet');
     setInviteTime('');
     setInviteLocation('');
-    setInviteMessage(getConnectTypeTemplate('intro_meet'));
+    setInviteMessage(getConnectTypeTemplate('intro_meet', ctx.userFullName || 'Mình', getBuddyName(userId)));
     setShowInviteModal(true);
   };
 
@@ -341,11 +352,12 @@ export default function App() {
 
     try {
       bridge.haptic('medium');
+      await ensureFreshToken();
       const activeWs = scope?.workspaceId || ctx?.workspaceId;
       if (!activeWs) return;
 
       const messageTemplateJson = JSON.stringify({
-        text: inviteMessage || getConnectTypeTemplate(inviteType),
+        text: inviteMessage || getConnectTypeTemplate(inviteType, ctx.userFullName || 'Mình', inviteSelectedUserIds.length > 1 ? 'các bạn' : getBuddyName(inviteSelectedUserIds[0])),
         time: inviteTime,
         location: inviteLocation.trim()
       });
@@ -392,6 +404,11 @@ export default function App() {
               userIds: [buddyId],
               title: '⚡ Lời mời kết nối mới!',
               body: `${ctx.userFullName || 'Một đồng nghiệp'} đã gửi lời mời kết nối "${typeLabel}" tới bạn. Mở app để xem ngay!`,
+              data: {
+                appSlug: 'buddy-connect',
+                kind: 'connection_invite',
+                screen: 'inbox',
+              },
             });
           } catch (pushErr) {
             console.warn('Lỗi push notification:', pushErr);
@@ -418,6 +435,7 @@ export default function App() {
   const handleSendConnectionRequest = async (buddyId, actionType, messageTemplate) => {
     try {
       bridge.haptic('medium');
+      await ensureFreshToken();
       const activeWs = scope?.workspaceId || ctx?.workspaceId;
       if (!activeWs) return;
 
@@ -460,6 +478,11 @@ export default function App() {
           userIds: [buddyId],
           title: '⚡ Lời mời kết nối mới!',
           body: `${ctx.userFullName || 'Một đồng nghiệp'} đã gửi lời mời kết nối "${typeLabel}" tới bạn. Mở app để xem ngay!`,
+          data: {
+            appSlug: 'buddy-connect',
+            kind: 'connection_invite',
+            screen: 'inbox',
+          },
         });
       } catch (pushErr) {
         console.warn('Lỗi push notification:', pushErr);
@@ -477,6 +500,7 @@ export default function App() {
   const handleRespondRequest = async (requestId, status) => {
     try {
       bridge.haptic('medium');
+      await ensureFreshToken();
       const activeWs = scope?.workspaceId || ctx?.workspaceId;
       if (!activeWs) return;
 
@@ -512,6 +536,11 @@ export default function App() {
             userIds: [updatedReq.from_user_id],
             title: '🎉 Lời mời đã được chấp nhận!',
             body: `${ctx.userFullName || 'Đồng nghiệp'} đã đồng ý kết nối với bạn. Hãy lên lịch gặp mặt ngoài đời nhé!`,
+            data: {
+              appSlug: 'buddy-connect',
+              kind: 'connection_accepted',
+              screen: 'connections',
+            },
           });
         } catch (pushErr) {
           console.warn('Lỗi push notification:', pushErr);
@@ -526,6 +555,7 @@ export default function App() {
 
   const handleDeleteConnectionRequest = async (requestId) => {
     const req = data.connectionRequests.find(r => r.id === requestId);
+    if (!req) return;
     const expired = isConnectionExpired(req);
 
     const ok = await dialog.confirm(
@@ -539,8 +569,16 @@ export default function App() {
 
     try {
       bridge.haptic('medium');
-      const { error } = await db.from('connection_requests').delete().eq('id', requestId);
+      const activeWs = scope?.workspaceId || ctx?.workspaceId;
+      const { error, count } = await db
+        .from('connection_requests')
+        .delete({ count: 'exact' })
+        .eq('id', requestId)
+        .eq('workspace_id', activeWs);
       if (error) throw error;
+      if (count === 0) {
+        throw new Error('Không thể xoá: bạn không có quyền xoá lời mời này, hoặc lời mời đã được xoá trước đó.');
+      }
       data.loadConnectionData();
     } catch (e) {
       dialog.error('Lỗi thu hồi lời mời', e.message);
@@ -618,6 +656,7 @@ export default function App() {
   const handleConfirmMeeting = async (meetingId, isConfirmed) => {
     try {
       bridge.haptic('medium');
+      await ensureFreshToken();
       const activeWs = scope?.workspaceId || ctx?.workspaceId;
       if (!activeWs) return;
 
@@ -689,6 +728,9 @@ export default function App() {
   const handleSendChatMessage = async (id, content, isClub = false) => {
     if (!content.trim()) return;
 
+    await ensureFreshToken();
+    const activeWs = scope?.workspaceId || ctx?.workspaceId;
+
     const newMessage = {
       id: `msg-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       senderId: ctx.userId,
@@ -719,6 +761,32 @@ export default function App() {
           .from('rooms')
           .update({ chat_messages: JSON.stringify(updatedMessages) })
           .eq('id', id);
+
+        // Thông báo đẩy cho members khác sender
+        try {
+          const recipients = new Set();
+          if (room.host_id !== ctx.userId) recipients.add(room.host_id);
+          (data.invitations || [])
+            .filter(i => i.room_id === id && i.status === 'accepted' && i.receiver_id !== ctx.userId)
+            .forEach(i => recipients.add(i.receiver_id));
+          if (recipients.size > 0 && activeWs) {
+            await mushyApi.push({
+              workspaceId: activeWs,
+              appSlug: 'buddy-connect',
+              userIds: [...recipients],
+              title: `💬 ${room.club_name || 'Cộng đồng'} có tin nhắn mới`,
+              body: `${ctx.userFullName || 'Một đồng nghiệp'}: ${content.trim()}`,
+              data: {
+                appSlug: 'buddy-connect',
+                kind: 'chat_message',
+                screen: 'connections',
+                recordId: id,
+              },
+            });
+          }
+        } catch (pushErr) {
+          console.warn('Lỗi push chat nhóm:', pushErr);
+        }
       } catch (e) {
         console.error('Failed to send group chat message:', e);
         data.loadConnectionData();
@@ -746,6 +814,28 @@ export default function App() {
           .from('connection_requests')
           .update({ chat_messages: JSON.stringify(updatedMessages) })
           .eq('id', id);
+
+        // Thông báo đẩy cho buddy còn lại
+        try {
+          const buddyId = req.from_user_id === ctx.userId ? req.to_user_id : req.from_user_id;
+          if (buddyId && activeWs) {
+            await mushyApi.push({
+              workspaceId: activeWs,
+              appSlug: 'buddy-connect',
+              userIds: [buddyId],
+              title: '💬 Tin nhắn mới',
+              body: `${ctx.userFullName || 'Một đồng nghiệp'}: ${content.trim()}`,
+              data: {
+                appSlug: 'buddy-connect',
+                kind: 'chat_message',
+                screen: 'connections',
+                recordId: id,
+              },
+            });
+          }
+        } catch (pushErr) {
+          console.warn('Lỗi push chat 1-1:', pushErr);
+        }
       } catch (e) {
         console.error('Failed to send buddy chat message:', e);
         data.loadConnectionData();
@@ -755,6 +845,7 @@ export default function App() {
 
   const handleCreateCommunity = async (payload, invitedUserIds = []) => {
     try {
+      await ensureFreshToken();
       bridge.haptic('medium');
       const activeWs = scope?.workspaceId || ctx?.workspaceId;
       if (!activeWs) return;
@@ -795,6 +886,12 @@ export default function App() {
             userIds: ids,
             title: '👥 Lời mời vào Cộng đồng!',
             body: `${ctx.userFullName || 'Một đồng nghiệp'} đã mời bạn tham gia cộng đồng "${payload.club_name}".`,
+            data: {
+              appSlug: 'buddy-connect',
+              kind: 'community_invite',
+              screen: 'inbox',
+              recordId: newRoom.id,
+            },
           });
         } catch (pushErr) {
           console.warn('Lỗi push notification:', pushErr);
@@ -810,6 +907,7 @@ export default function App() {
 
   const handleUpgradeToCommunity = async (connectionId, clubName) => {
     try {
+      await ensureFreshToken();
       bridge.haptic('medium');
       const activeWs = scope?.workspaceId || ctx?.workspaceId;
       if (!activeWs) return;
@@ -848,6 +946,24 @@ export default function App() {
 
       if (invErr) throw invErr;
 
+      try {
+        await mushyApi.push({
+          workspaceId: activeWs,
+          appSlug: 'buddy-connect',
+          userIds: [buddyId],
+          title: '👥 Trò chuyện đã được nâng cấp!',
+          body: `${ctx.userFullName || 'Một đồng nghiệp'} đã nâng cấp kết nối thành cộng đồng "${clubName}".`,
+          data: {
+            appSlug: 'buddy-connect',
+            kind: 'community_upgrade',
+            screen: 'connections',
+            recordId: newRoom.id,
+          },
+        });
+      } catch (pushErr) {
+        console.warn('Lỗi push notification nâng cấp:', pushErr);
+      }
+
       await dialog.success('Đã nâng cấp!', 'Đã nâng cấp trò chuyện thành Cộng đồng mới.');
       setActiveChatConnection(null);
 
@@ -863,6 +979,7 @@ export default function App() {
 
   const handleInviteToCommunity = async (roomId, receiverIds) => {
     try {
+      await ensureFreshToken();
       bridge.haptic('medium');
       const activeWs = scope?.workspaceId || ctx?.workspaceId;
       if (!activeWs) return;
@@ -897,6 +1014,12 @@ export default function App() {
           userIds: newIds,
           title: '👥 Lời mời vào Cộng đồng!',
           body: `${ctx.userFullName || 'Một đồng nghiệp'} đã mời bạn tham gia cộng đồng "${room.club_name}".`,
+          data: {
+            appSlug: 'buddy-connect',
+            kind: 'community_invite',
+            screen: 'inbox',
+            recordId: roomId,
+          },
         });
       } catch (pushErr) {
         console.warn('Lỗi push notification:', pushErr);
@@ -910,6 +1033,7 @@ export default function App() {
 
   const handleRespondInvitation = async (invitationId, status) => {
     try {
+      await ensureFreshToken();
       bridge.haptic('medium');
       const activeWs = scope?.workspaceId || ctx?.workspaceId;
       if (!activeWs) return;
@@ -989,45 +1113,15 @@ export default function App() {
     }
   };
 
-  // ─── AI Icebreaker ─────────────────────────────────────────────────────────
 
-  const handleGetIcebreaker = async () => {
+  // ─── Icebreaker (template-based, no AI) ──────────────────────────────────
+
+  const handleGenerateIcebreaker = () => {
     if (!selectedConnectBuddy) return;
-    const toProfile = data.allProfiles[selectedConnectBuddy.user_id] || {};
-    setLoadingIcebreaker(true);
-    try {
-      const res = await fetch('/api/icebreaker', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${ctx.token}`,
-          'X-Workspace-Id': scope?.workspaceId || ctx?.workspaceId,
-          'X-Home-Workspace-Id': ctx.workspaceId,
-        },
-        body: JSON.stringify({
-          fromUser: {
-            full_name: data.members.find(m => m.user_id === ctx.userId)?.full_name || 'Tôi',
-            tags: data.myTags,
-            career_goals: data.myGoals,
-          },
-          toUser: {
-            full_name: selectedConnectBuddy.full_name,
-            tags: data.allUserTags[selectedConnectBuddy.user_id] || [],
-            career_goals: toProfile.career_goals || [],
-          },
-        }),
-      });
-      if (res.status === 429) {
-        return dialog.error('Hết quota AI', 'Bạn đã dùng hết 10 lần gợi ý AI hôm nay. Hãy thử lại vào ngày mai!');
-      }
-      const result = await res.json();
-      if (result.message) setIcebreakerMsg(result.message);
-    } catch (e) {
-      console.warn('[icebreaker] failed:', e);
-      setIcebreakerMsg(`Chào ${selectedConnectBuddy.full_name}, mình thấy chúng ta có vài điểm chung và muốn kết nối! Bạn có rảnh không?`);
-    } finally {
-      setLoadingIcebreaker(false);
-    }
+    const fromName = ctx.userFullName || data.members.find(m => m.user_id === ctx.userId)?.full_name || 'Mình';
+    const toName = selectedConnectBuddy.full_name || 'bạn';
+    setIcebreakerMsg(generateIcebreakerMessage('casual', fromName, toName));
+    bridge.haptic('light');
   };
 
   // ─── Reset Profile ─────────────────────────────────────────────────────────
@@ -1345,10 +1439,9 @@ export default function App() {
           myProfile={data.myProfile}
           allProfiles={data.allProfiles}
           onClose={() => { setShowConnectSheet(false); setSelectedConnectBuddy(null); }}
-          onSendRequest={(buddyId, type) => handleSendConnectionRequest(buddyId, type, getConnectTypeTemplate(type))}
+          onSendRequest={(buddyId, type) => handleSendConnectionRequest(buddyId, type, getConnectTypeTemplate(type, ctx.userFullName || data.members.find(m => m.user_id === ctx.userId)?.full_name || 'Mình', selectedConnectBuddy?.full_name || 'bạn'))}
           icebreakerMsg={icebreakerMsg}
-          loadingIcebreaker={loadingIcebreaker}
-          onGetIcebreaker={handleGetIcebreaker}
+          onGetIcebreaker={handleGenerateIcebreaker}
         />
       )}
 
@@ -1366,6 +1459,8 @@ export default function App() {
           setInviteLocation={setInviteLocation}
           inviteMessage={inviteMessage}
           setInviteMessage={setInviteMessage}
+          fromName={ctx.userFullName || data.members.find(m => m.user_id === ctx.userId)?.full_name || 'Mình'}
+          toName={inviteSelectedUserIds.length > 1 ? 'các bạn' : getBuddyName(inviteSelectedUserIds[0])}
           onSend={handleSendGroupInvitation}
           onClose={() => {
             setShowInviteModal(false);
@@ -1429,10 +1524,9 @@ export default function App() {
         myProfile={data.myProfile}
         allProfiles={data.allProfiles}
         onClose={() => { setShowConnectSheet(false); setSelectedConnectBuddy(null); }}
-        onSendRequest={(buddyId, type) => handleSendConnectionRequest(buddyId, type, getConnectTypeTemplate(type))}
+        onSendRequest={(buddyId, type) => handleSendConnectionRequest(buddyId, type, getConnectTypeTemplate(type, ctx.userFullName || data.members.find(m => m.user_id === ctx.userId)?.full_name || 'Mình', selectedConnectBuddy?.full_name || 'bạn'))}
         icebreakerMsg={icebreakerMsg}
-        loadingIcebreaker={loadingIcebreaker}
-        onGetIcebreaker={handleGetIcebreaker}
+        onGetIcebreaker={handleGenerateIcebreaker}
       />
     )}
 
@@ -1450,6 +1544,8 @@ export default function App() {
         setInviteLocation={setInviteLocation}
         inviteMessage={inviteMessage}
         setInviteMessage={setInviteMessage}
+        fromName={ctx.userFullName || data.members.find(m => m.user_id === ctx.userId)?.full_name || 'Mình'}
+        toName={inviteSelectedUserIds.length > 1 ? 'các bạn' : getBuddyName(inviteSelectedUserIds[0])}
         onSend={handleSendGroupInvitation}
         onClose={() => {
           setShowInviteModal(false);

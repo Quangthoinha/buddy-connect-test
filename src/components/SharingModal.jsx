@@ -69,7 +69,7 @@ export default function SharingModal({
 
         <div style={{ borderTop: '1px solid var(--hairline)', marginTop: 18, paddingTop: 16, textAlign: 'left' }}>
           <h4 style={{ margin: '0 0 10px', fontSize: 14 }}>Các kết nối chia sẻ hiện tại</h4>
-          {loading ? (
+          {loadingGrants ? (
             <div style={{ display: 'flex', justifyContent: 'center', padding: 12 }}>
               <span className="mushy-spinner" />
             </div>

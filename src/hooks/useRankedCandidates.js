@@ -45,6 +45,7 @@ export function useRankedCandidates({
         const tags = allUserTags[member.user_id] || [];
 
         // Apply search query filter if present
+        let isSearchMatch = false;
         if (q) {
           const nameMatch = member.full_name?.toLowerCase().includes(q);
           const deptMatch = profile.department?.toLowerCase().includes(q);
@@ -57,7 +58,8 @@ export function useRankedCandidates({
             return tagName?.includes(q) || parentName?.includes(q);
           });
 
-          if (!nameMatch && !deptMatch && !facMatch && !tagMatches) {
+          isSearchMatch = nameMatch || deptMatch || facMatch || tagMatches;
+          if (!isSearchMatch) {
             return null;
           }
         }
@@ -96,7 +98,8 @@ export function useRankedCandidates({
           fallbackParentLabel = matchedParentObj ? matchedParentObj.parent_name : '';
         }
 
-        if (exactMatchCount === 0 && !isFallback) return null;
+        // Khi user tìm kiếm chủ động, giữ lại cả người không có điểm chung tag/skill
+        if (!isSearchMatch && exactMatchCount === 0 && !isFallback) return null;
 
         let matchScore = 30;
         matchScore += exactMatchCount * 25;

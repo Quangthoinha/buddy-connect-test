@@ -36,6 +36,8 @@ export async function listMembers(workspaceId) {
     full_name: profileMap[r.user_id]?.full_name ?? null,
     avatar_url: profileMap[r.user_id]?.avatar_url ?? null,
     work_phone: profileMap[r.user_id]?.work_phone ?? null,
+    work_email: profileMap[r.user_id]?.work_email ?? null,
+    personal_email: profileMap[r.user_id]?.personal_email ?? null,
   }));
 }
 
@@ -43,7 +45,7 @@ export async function getProfiles(userIds) {
   if (!userIds?.length) return {};
   const { data, error } = await dbPublic
     .from('user_profiles')
-    .select('user_id, full_name, avatar_url, work_phone')
+    .select('user_id, full_name, avatar_url, work_phone, work_email, personal_email')
     .in('user_id', userIds);
   if (error) throw error;
   return Object.fromEntries((data || []).map((p) => [p.user_id, p]));

@@ -99,7 +99,7 @@ export default function InboxScreen({
                       width: 44,
                       height: 44,
                       flexShrink: 0,
-                      background: expired ? '#E5E7EB' : getAvatarGradient(formatName(hostObj.full_name).charAt(0)),
+                      background: expired ? '#E5E7EB' : getAvatarGradient(formatName(hostObj).charAt(0)),
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -107,12 +107,12 @@ export default function InboxScreen({
                       fontWeight: 'bold',
                       color: '#fff'
                     }}>
-                      <span>{formatName(hostObj.full_name).charAt(0)}</span>
+                      <span>{formatName(hostObj).charAt(0)}</span>
                     </div>
                     <div className="buddy-info" style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <h4 style={{ fontSize: '14.5px', fontWeight: 800, color: expired ? '#9CA3AF' : 'var(--ink)', margin: 0, lineHeight: 1.35 }}>
-                          Lời mời từ {formatName(hostObj.full_name)}
+                          Lời mời từ {formatName(hostObj)}
                         </h4>
                       </div>
                       <p style={{ margin: '3px 0 0', fontSize: 12, color: expired ? '#9CA3AF' : 'var(--muted)', lineHeight: 1.35 }}>
@@ -200,7 +200,7 @@ export default function InboxScreen({
                       width: 44,
                       height: 44,
                       flexShrink: 0,
-                      background: expired ? '#E5E7EB' : getAvatarGradient(formatName(hostObj.full_name).charAt(0)),
+                      background: expired ? '#E5E7EB' : getAvatarGradient(formatName(hostObj).charAt(0)),
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -208,11 +208,11 @@ export default function InboxScreen({
                       fontWeight: 'bold',
                       color: '#fff'
                     }}>
-                      <span>{formatName(hostObj.full_name).charAt(0)}</span>
+                      <span>{formatName(hostObj).charAt(0)}</span>
                     </div>
                     <div className="buddy-info" style={{ flex: 1, minWidth: 0 }}>
                       <h4 style={{ fontSize: '14.5px', fontWeight: 800, color: expired ? '#9CA3AF' : 'var(--ink)', margin: 0, lineHeight: 1.35 }}>
-                        Lời mời đi chung từ {formatName(hostObj.full_name)}
+                        Lời mời đi chung từ {formatName(hostObj)}
                       </h4>
                       <p style={{ margin: '3px 0 0', fontSize: 12, color: expired ? '#9CA3AF' : 'var(--muted)', lineHeight: 1.35 }}>
                         🏢 {profileObj.department || 'Phòng ban'} · 📍 {profileObj.facility || 'Cơ sở'}
@@ -324,7 +324,7 @@ export default function InboxScreen({
                       width: 44,
                       height: 44,
                       flexShrink: 0,
-                      background: expired ? '#E5E7EB' : getAvatarGradient(formatName(hostObj.full_name).charAt(0)),
+                      background: expired ? '#E5E7EB' : getAvatarGradient(formatName(hostObj).charAt(0)),
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -332,14 +332,14 @@ export default function InboxScreen({
                       fontWeight: 'bold',
                       color: '#fff'
                     }}>
-                      <span>{formatName(hostObj.full_name).charAt(0)}</span>
+                      <span>{formatName(hostObj).charAt(0)}</span>
                     </div>
                     <div className="buddy-info" style={{ flex: 1, minWidth: 0 }}>
                       <h4 style={{ fontSize: '14.5px', fontWeight: 800, color: expired ? '#9CA3AF' : 'var(--ink)', margin: 0, lineHeight: 1.35 }}>
                         Mời vào cộng đồng: {room.club_name}
                       </h4>
                       <p style={{ margin: '3px 0 0', fontSize: 12, color: expired ? '#9CA3AF' : 'var(--muted)', lineHeight: 1.35 }}>
-                        👤 Người mời: {formatName(hostObj.full_name)} · 🏢 {profileObj.department || 'Phòng ban'}
+                        👤 Người mời: {formatName(hostObj)} · 🏢 {profileObj.department || 'Phòng ban'}
                       </p>
                     </div>
                     <span style={{

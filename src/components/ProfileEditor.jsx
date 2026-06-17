@@ -82,7 +82,7 @@ export default function ProfileEditor({
   return (
     <>
       <div style={{ marginBottom: 12 }}>
-        <label className="mushy-label">Phòng ban trực thuộc (Department)</label>
+        <label className="mushy-label">Phòng ban trực thuộc</label>
         <input
           type="text"
           className="mushy-input"
@@ -94,7 +94,7 @@ export default function ProfileEditor({
       </div>
 
       <div style={{ marginBottom: 12 }}>
-        <label className="mushy-label">Cơ sở làm việc (Facility)</label>
+        <label className="mushy-label">Cơ sở làm việc</label>
         <input
           type="text"
           className="mushy-input"
@@ -106,7 +106,7 @@ export default function ProfileEditor({
       </div>
 
       <div style={{ marginBottom: 18 }}>
-        <label className="mushy-label">Khung giờ rảnh thông thường (Multi-select)</label>
+        <label className="mushy-label">Khung giờ rảnh thông thường</label>
         <div className="chips-container" style={{ marginTop: 6 }}>
           {AVAILABLE_TIMES.map(time => {
             const isSelected = myProfile.available_times.includes(time);
@@ -124,7 +124,7 @@ export default function ProfileEditor({
       </div>
 
       <ChipGroup
-        title="Kỹ năng chuyên môn (Skills)"
+        title="Kỹ năng chuyên môn"
         subtitle="Chọn các kỹ năng bạn có — dùng để match với người cùng chuyên môn"
         options={SKILL_OPTIONS}
         selected={mySkills}
@@ -134,7 +134,7 @@ export default function ProfileEditor({
       />
 
       <ChipGroup
-        title="Mục tiêu nghề nghiệp (Career Goals)"
+        title="Mục tiêu nghề nghiệp"
         subtitle="Chọn mục tiêu bạn đang hướng tới — giúp kết nối với người cùng chí hướng"
         options={GOAL_OPTIONS}
         selected={myGoals}
@@ -144,7 +144,7 @@ export default function ProfileEditor({
       />
 
       <div style={{ borderTop: '1px solid var(--hairline)', paddingTop: 18, marginTop: 18 }}>
-        <label className="mushy-label">Vai trò thành viên (User Roles)</label>
+        <label className="mushy-label">Vai trò thành viên</label>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8 }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 13 }}>
             <input
@@ -168,7 +168,7 @@ export default function ProfileEditor({
       </div>
 
       <div style={{ borderTop: '1px solid var(--hairline)', paddingTop: 18, marginTop: 18 }}>
-        <label className="mushy-label">Ưu tiên hình thức kết nối (Connect Types)</label>
+        <label className="mushy-label">Ưu tiên hình thức kết nối</label>
         <p style={{ fontSize: 11.5, color: 'var(--muted)', margin: '2px 0 8px' }}>Chọn các hoạt động bạn muốn giao lưu cùng đồng nghiệp</p>
         <div className="chips-container">
           {CONNECT_TYPE_OPTIONS.map(ct => {
@@ -187,7 +187,7 @@ export default function ProfileEditor({
       </div>
 
       <ChipGroup
-        title="Kỹ năng tôi có thể chia sẻ (Share Skills)"
+        title="Kỹ năng tôi có thể chia sẻ"
         subtitle="Chọn kỹ năng bạn tự tin hướng dẫn, trao đổi cho đồng nghiệp"
         options={SKILL_OPTIONS}
         selected={myProfile.share_skills || []}
@@ -197,7 +197,7 @@ export default function ProfileEditor({
       />
 
       <ChipGroup
-        title="Kỹ năng tôi muốn học hỏi (Learn Skills)"
+        title="Kỹ năng tôi muốn học hỏi"
         subtitle="Chọn kỹ năng bạn đang muốn tìm hiểu hoặc cải thiện"
         options={SKILL_OPTIONS}
         selected={myProfile.learn_skills || []}
@@ -207,13 +207,13 @@ export default function ProfileEditor({
       />
 
       <div style={{ borderTop: '1px solid var(--hairline)', paddingTop: 18, marginTop: 18 }}>
-        <h4 style={{ margin: '0 0 10px', fontSize: 14 }}>Hệ thống thẻ sở thích (Tag Taxonomy - Accordion & Lọc Nhanh)</h4>
+        <h4 style={{ margin: '0 0 10px', fontSize: 14 }}>Thẻ sở thích</h4>
         <div className="search-box-container">
           <span className="search-icon">🔍</span>
           <input
             type="text"
             className="mushy-input search-input"
-            placeholder="Gõ từ khóa để lọc nhanh 200 Child Tags..."
+            placeholder="Tìm thẻ sở thích..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />

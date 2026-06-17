@@ -16,6 +16,8 @@ export default function InviteModal({
   setInviteLocation,
   inviteMessage,
   setInviteMessage,
+  fromName = 'Mình',
+  toName = 'bạn',
   onSend,
   onClose
 }) {
@@ -23,8 +25,12 @@ export default function InviteModal({
 
   const filteredMembers = members.filter(m => {
     const name = m.full_name?.trim();
-    if (!name || name === '.') return false;
-    return name.toLowerCase().includes(searchQuery.toLowerCase());
+    const hasValidName = name && name !== '.';
+    const email = m.work_email || m.personal_email;
+    const hasValidEmail = email && typeof email === 'string' && email.includes('@');
+    if (!hasValidName && !hasValidEmail) return false;
+    const displayName = hasValidName ? name : email.split('@')[0];
+    return displayName.toLowerCase().includes(searchQuery.toLowerCase());
   });
 
   function toggleUser(userId) {
@@ -35,9 +41,9 @@ export default function InviteModal({
 
   function handleTypeChange(type) {
     setInviteType(type);
-    const currentDefaultMsg = getConnectTypeTemplate(inviteType);
+    const currentDefaultMsg = getConnectTypeTemplate(inviteType, fromName, toName);
     if (!inviteMessage || inviteMessage === currentDefaultMsg) {
-      setInviteMessage(getConnectTypeTemplate(type));
+      setInviteMessage(getConnectTypeTemplate(type, fromName, toName));
     }
   }
 
@@ -79,7 +85,7 @@ export default function InviteModal({
                       style={{ padding: '3px 8px', fontSize: '11px', borderRadius: '8px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                       onClick={() => toggleUser(uid)}
                     >
-                      {formatName(m.full_name)} ✕
+                      {formatName(m)} ✕
                     </span>
                   );
                 })}
@@ -109,7 +115,7 @@ export default function InviteModal({
               {filteredMembers.map(m => {
                 const isSelected = selectedUserIds.includes(m.user_id);
                 const prof = allProfiles[m.user_id] || {};
-                const name = formatName(m.full_name);
+                const name = formatName(m);
                 return (
                   <div
                     key={m.user_id}
@@ -206,30 +212,29 @@ export default function InviteModal({
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: '10px', marginBottom: 14 }}>
-            <div style={{ flex: 1 }}>
-              <label className="mushy-label" style={{ marginBottom: 6, display: 'block', fontSize: '12px', fontWeight: '700' }}>⏰ Thời gian hẹn</label>
-              <input
-                type="datetime-local"
-                className="mushy-input"
-                value={inviteTime}
-                onChange={(e) => setInviteTime(e.target.value)}
-                required
-                style={{ minHeight: '36px', height: '36px', fontSize: '12.5px', padding: '0 8px' }}
-              />
-            </div>
-            <div style={{ flex: 1 }}>
-              <label className="mushy-label" style={{ marginBottom: 6, display: 'block', fontSize: '12px', fontWeight: '700' }}>📍 Địa điểm</label>
-              <input
-                type="text"
-                className="mushy-input"
-                placeholder="Vd: Keangnam, Lotte..."
-                value={inviteLocation}
-                onChange={(e) => setInviteLocation(e.target.value)}
-                required
-                style={{ minHeight: '36px', height: '36px', fontSize: '12.5px', padding: '0 8px' }}
-              />
-            </div>
+          <div style={{ marginBottom: 10 }}>
+            <label className="mushy-label" style={{ marginBottom: 6, display: 'block', fontSize: '12px', fontWeight: '700' }}>⏰ Thời gian hẹn</label>
+            <input
+              type="datetime-local"
+              className="mushy-input"
+              value={inviteTime}
+              onChange={(e) => setInviteTime(e.target.value)}
+              required
+              style={{ minHeight: '36px', height: '36px', fontSize: '12.5px', padding: '0 8px' }}
+            />
+          </div>
+
+          <div style={{ marginBottom: 14 }}>
+            <label className="mushy-label" style={{ marginBottom: 6, display: 'block', fontSize: '12px', fontWeight: '700' }}>📍 Địa điểm</label>
+            <input
+              type="text"
+              className="mushy-input"
+              placeholder="Vd: Keangnam, Lotte, căng tin tầng 2..."
+              value={inviteLocation}
+              onChange={(e) => setInviteLocation(e.target.value)}
+              required
+              style={{ minHeight: '36px', height: '36px', fontSize: '12.5px', padding: '0 12px' }}
+            />
           </div>
 
           <div style={{ marginBottom: 16 }}>

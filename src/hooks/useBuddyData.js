@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { getContext } from '../lib/context.js';
 import { db } from '../lib/supabase.js';
-import { listMembers } from '../lib/members.js';
+import { listMembers, getProfiles } from '../lib/members.js';
 import { useActiveScope } from '../lib/sharing.js';
 import { subscribeToTable } from '../lib/realtime.js';
 
@@ -43,7 +43,7 @@ export function useBuddyData() {
   const activeWs = scope?.workspaceId;
 
   async function loadConnectionData() {
-    if (!activeWs) return;
+    if (!activeWs) return { requests: [], meetings: [], rms: [], invs: [] };
     try {
       const { data: requests, error: reqErr } = await db
         .from('connection_requests')
@@ -102,8 +102,16 @@ export function useBuddyData() {
         .order('created_at', { ascending: false });
       if (invsErr) console.error('Error fetching invitations:', invsErr);
       else setInvitations(invs || []);
+
+      return {
+        requests: requests || [],
+        meetings: meetings || [],
+        rms: rms || [],
+        invs: invs || []
+      };
     } catch (err) {
       console.warn('Lỗi tải dữ liệu Connection:', err);
+      return { requests: [], meetings: [], rms: [], invs: [] };
     }
   }
 
@@ -152,7 +160,6 @@ export function useBuddyData() {
 
       // 2. Fetch workspace members
       const workspaceMembers = await listMembers(activeWs);
-      setMembers(workspaceMembers.filter(m => m.user_id !== ctx.userId));
 
       // 3. Fetch all profiles & tags in workspace to build match registry
       const { data: allProfs } = await db
@@ -185,8 +192,45 @@ export function useBuddyData() {
         .eq('workspace_id', activeWs);
       setInteractionHistory(history || []);
 
-      // 5. Load Connection Data
-      await loadConnectionData();
+      // 5. Load Connection Data & Resolve profiles for all participants
+      const connData = await loadConnectionData();
+
+      // Collect all user IDs involved in connections to make sure their names are displayed
+      const extraUserIds = new Set();
+      connData.requests.forEach(r => {
+        extraUserIds.add(r.from_user_id);
+        extraUserIds.add(r.to_user_id);
+      });
+      connData.rms.forEach(r => {
+        extraUserIds.add(r.host_id);
+      });
+      connData.invs.forEach(i => {
+        extraUserIds.add(i.receiver_id);
+      });
+      extraUserIds.delete(ctx.userId);
+
+      const existingIds = new Set(workspaceMembers.map(m => m.user_id));
+      const missingIds = [...extraUserIds].filter(id => !existingIds.has(id));
+
+      let extraMembers = [];
+      if (missingIds.length > 0) {
+        try {
+          const extraProfiles = await getProfiles(missingIds);
+          extraMembers = missingIds.map(id => ({
+            user_id: id,
+            role: 'member',
+            full_name: extraProfiles[id]?.full_name ?? null,
+            avatar_url: extraProfiles[id]?.avatar_url ?? null,
+            work_phone: extraProfiles[id]?.work_phone ?? null,
+            work_email: extraProfiles[id]?.work_email ?? null,
+            personal_email: extraProfiles[id]?.personal_email ?? null,
+          }));
+        } catch (extraErr) {
+          console.warn('Lỗi lấy thông tin extra members:', extraErr);
+        }
+      }
+
+      setMembers([...workspaceMembers, ...extraMembers].filter(m => m.user_id !== ctx.userId));
     } catch (err) {
       console.error('Lỗi tải dữ liệu Connect:', err);
     } finally {

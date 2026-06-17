@@ -95,11 +95,12 @@ export default function ScopeSwitcher({ onManageGrants }) {
           alignItems: 'center',
           gap: 8,
           cursor: 'pointer',
+          maxWidth: 220,
         }}
         aria-haspopup="listbox"
         aria-expanded={open}
       >
-        <span style={{ fontWeight: 600 }}>{activeLabel}</span>
+        <span style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{activeLabel}</span>
         {activeBadge && (
           <span
             style={{

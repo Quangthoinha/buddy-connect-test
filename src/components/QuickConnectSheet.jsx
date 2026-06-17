@@ -1,7 +1,7 @@
 import React from 'react';
 import { bridge } from '../lib/bridge.js';
 
-export default function QuickConnectSheet({ buddy, myProfile, allProfiles, onClose, onSendRequest, icebreakerMsg, loadingIcebreaker, onGetIcebreaker }) {
+export default function QuickConnectSheet({ buddy, myProfile, allProfiles, onClose, onSendRequest, icebreakerMsg, onGetIcebreaker }) {
   if (!buddy) return null;
 
   const buddyProfile = allProfiles[buddy.user_id] || {};
@@ -74,10 +74,9 @@ export default function QuickConnectSheet({ buddy, myProfile, allProfiles, onClo
               type="button"
               className="mushy-btn mushy-btn--ghost mushy-btn--block"
               style={{ fontSize: 12, minHeight: 36 }}
-              disabled={loadingIcebreaker}
               onClick={() => { bridge.haptic('light'); onGetIcebreaker?.(); }}
             >
-              {loadingIcebreaker ? '✨ AI đang gợi ý…' : '✨ Gợi ý câu mở đầu (AI)'}
+              ✨ Gợi ý câu mở đầu
             </button>
 
             {icebreakerMsg && (
