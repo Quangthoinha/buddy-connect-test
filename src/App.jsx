@@ -1273,6 +1273,7 @@ export default function App() {
               myTags={data.myTags}
               searchQuery={searchQuery}
               fallbackEnabled={fallbackEnabled}
+              scope={{ workspaceId: ctx?.workspaceId, label: 'Workspace của bạn' }}
               rankedCandidates={rankedCandidates}
               newbiePrimaryBuddy={newbiePrimaryBuddy}
               hasConnectedPrimaryBuddy={hasConnectedPrimaryBuddy}
