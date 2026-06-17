@@ -2,15 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { getContext, isInShell } from './lib/context.js';
 import { bridge } from './lib/bridge.js';
 import { db } from './lib/supabase.js';
-import {
-  useActiveScope,
-  useDefaultScopeInitializer,
-  useIsAnyWorkspaceAdmin,
-  generateShareCode,
-  redeemShareCode,
-  listShareGrants,
-  revokeShareGrant,
-} from './lib/sharing.js';
 import { useDialog } from './components/Dialog.jsx';
 import { mushyApi } from './lib/mushy-api.js';
 import { TAXONOMY } from './lib/app/taxonomy.jsx';
@@ -28,23 +19,17 @@ import ConnectionsScreen from './screens/ConnectionsScreen.jsx';
 import ProfileScreen from './screens/ProfileScreen.jsx';
 
 // Components
-import ScopeSwitcher from './components/ScopeSwitcher.jsx';
 import SkeletonScreen from './components/SkeletonScreen.jsx';
 import QuickConnectSheet from './components/QuickConnectSheet.jsx';
 import InviteModal from './components/InviteModal.jsx';
 import CreateCommunityModal from './components/CreateCommunityModal.jsx';
 import ProfileModal from './components/ProfileModal.jsx';
-import SharingModal from './components/SharingModal.jsx';
 import ChatModal from './components/ChatModal.jsx';
-import ShareManageModal from './components/ShareManageModal.jsx';
 import './App.css';
 
 export default function App() {
   const dialog = useDialog();
   const ctx = useMemo(() => getContext(), []);
-  const scope = useActiveScope();
-  const isAnyAdmin = useIsAnyWorkspaceAdmin();
-  useDefaultScopeInitializer();
 
   // Navigation
   const [activeTab, setActiveTab] = useState('radar');
@@ -55,7 +40,7 @@ export default function App() {
   // Consent gate
   const [consentGranted, setConsentGranted] = useState(() => {
     try {
-      const activeWs = scope?.workspaceId || ctx?.workspaceId;
+      const activeWs = ctx?.workspaceId;
       const user = ctx?.userId;
       if (typeof localStorage !== 'undefined' && user && activeWs) {
         const stored = localStorage.getItem(`mushy.consentGranted.${activeWs}.${user}`);
@@ -88,22 +73,16 @@ export default function App() {
 
   const [showProfileModal, setShowProfileModal] = useState(false);
 
-  const [showSharingModal, setShowSharingModal] = useState(false);
-  const [showShareManageModal, setShowShareManageModal] = useState(false);
-  const [shareCodeInput, setShareCodeInput] = useState('');
-  const [generatedCode, setGeneratedCode] = useState(null);
-  const [shareGrants, setShareGrants] = useState([]);
-  const [loadingGrants, setLoadingGrants] = useState(false);
 
   const [activeChatConnection, setActiveChatConnection] = useState(null);
 
   const [serverMatchReasons, setServerMatchReasons] = useState({});
   const [icebreakerMsg, setIcebreakerMsg] = useState('');
 
-  // Reset pagination when filters / scope change
+  // Reset pagination when filters / workspace change
   useEffect(() => {
     setRadarPage(1);
-  }, [searchQuery, fallbackEnabled, scope?.workspaceId]);
+  }, [searchQuery, fallbackEnabled, ctx?.workspaceId]);
 
   // Reset icebreaker when switching buddy
   useEffect(() => {
@@ -138,7 +117,7 @@ export default function App() {
   async function loadServerMatchReasons() {
     try {
       const freshCtx = await ensureFreshToken();
-      const activeWs = scope?.workspaceId || ctx?.workspaceId;
+      const activeWs = ctx?.workspaceId;
       const res = await fetch('/api/match', {
         method: 'POST',
         headers: {
@@ -162,11 +141,11 @@ export default function App() {
   }
 
   useEffect(() => {
-    if (data.hasProfile && scope?.workspaceId) {
+    if (data.hasProfile && ctx?.workspaceId) {
       loadServerMatchReasons();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data.hasProfile, scope?.workspaceId, data.myTags]);
+  }, [data.hasProfile, ctx?.workspaceId, data.myTags]);
 
   // ─── Handlers ────────────────────────────────────────────────────────────
 
@@ -178,7 +157,7 @@ export default function App() {
     try {
       await ensureFreshToken();
       bridge.haptic('medium');
-      const activeWs = scope?.workspaceId || ctx?.workspaceId;
+      const activeWs = ctx?.workspaceId;
 
       // Auto-seed tags taxonomy if missing
       try {
@@ -252,7 +231,7 @@ export default function App() {
     try {
       await ensureFreshToken();
       bridge.haptic('medium');
-      const activeWs = scope?.workspaceId || ctx?.workspaceId;
+      const activeWs = ctx?.workspaceId;
       if (!activeWs) return;
 
       const consentTime = new Date().toISOString();
@@ -353,7 +332,7 @@ export default function App() {
     try {
       bridge.haptic('medium');
       await ensureFreshToken();
-      const activeWs = scope?.workspaceId || ctx?.workspaceId;
+      const activeWs = ctx?.workspaceId;
       if (!activeWs) return;
 
       const messageTemplateJson = JSON.stringify({
@@ -436,7 +415,7 @@ export default function App() {
     try {
       bridge.haptic('medium');
       await ensureFreshToken();
-      const activeWs = scope?.workspaceId || ctx?.workspaceId;
+      const activeWs = ctx?.workspaceId;
       if (!activeWs) return;
 
       const { data: existing } = await db
@@ -501,7 +480,7 @@ export default function App() {
     try {
       bridge.haptic('medium');
       await ensureFreshToken();
-      const activeWs = scope?.workspaceId || ctx?.workspaceId;
+      const activeWs = ctx?.workspaceId;
       if (!activeWs) return;
 
       const now = new Date().toISOString();
@@ -569,7 +548,7 @@ export default function App() {
 
     try {
       bridge.haptic('medium');
-      const activeWs = scope?.workspaceId || ctx?.workspaceId;
+      const activeWs = ctx?.workspaceId;
       const { error, count } = await db
         .from('connection_requests')
         .delete({ count: 'exact' })
@@ -604,7 +583,7 @@ export default function App() {
   };
 
   const awardConnectionPoints = async (userId, pointsToAdd) => {
-    const activeWs = scope?.workspaceId || ctx?.workspaceId;
+    const activeWs = ctx?.workspaceId;
     if (!activeWs) return;
 
     try {
@@ -657,7 +636,7 @@ export default function App() {
     try {
       bridge.haptic('medium');
       await ensureFreshToken();
-      const activeWs = scope?.workspaceId || ctx?.workspaceId;
+      const activeWs = ctx?.workspaceId;
       if (!activeWs) return;
 
       const { data: meeting, error: meetErr } = await db
@@ -729,7 +708,7 @@ export default function App() {
     if (!content.trim()) return;
 
     await ensureFreshToken();
-    const activeWs = scope?.workspaceId || ctx?.workspaceId;
+    const activeWs = ctx?.workspaceId;
 
     const newMessage = {
       id: `msg-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
@@ -847,7 +826,7 @@ export default function App() {
     try {
       await ensureFreshToken();
       bridge.haptic('medium');
-      const activeWs = scope?.workspaceId || ctx?.workspaceId;
+      const activeWs = ctx?.workspaceId;
       if (!activeWs) return;
 
       const { data: newRoom, error } = await db
@@ -909,7 +888,7 @@ export default function App() {
     try {
       await ensureFreshToken();
       bridge.haptic('medium');
-      const activeWs = scope?.workspaceId || ctx?.workspaceId;
+      const activeWs = ctx?.workspaceId;
       if (!activeWs) return;
 
       const req = data.connectionRequests.find(r => r.id === connectionId);
@@ -981,7 +960,7 @@ export default function App() {
     try {
       await ensureFreshToken();
       bridge.haptic('medium');
-      const activeWs = scope?.workspaceId || ctx?.workspaceId;
+      const activeWs = ctx?.workspaceId;
       if (!activeWs) return;
 
       const room = data.rooms.find(r => r.id === roomId);
@@ -1035,7 +1014,7 @@ export default function App() {
     try {
       await ensureFreshToken();
       bridge.haptic('medium');
-      const activeWs = scope?.workspaceId || ctx?.workspaceId;
+      const activeWs = ctx?.workspaceId;
       if (!activeWs) return;
 
       const { error } = await db
@@ -1050,69 +1029,6 @@ export default function App() {
       dialog.error('Lỗi phản hồi lời mời', e.message);
     }
   };
-
-  // ─── Sharing Modal Handlers ──────────────────────────────────────────────
-
-  const handleOpenSharing = async () => {
-    setShowSharingModal(true);
-    setLoadingGrants(true);
-    setGeneratedCode(null);
-    try {
-      const grants = await listShareGrants();
-      setShareGrants(grants);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoadingGrants(false);
-    }
-  };
-
-  const handleGenerateCode = async () => {
-    try {
-      bridge.haptic('light');
-      const codeData = await generateShareCode({ expiresHours: 24 });
-      setGeneratedCode(codeData);
-      const grants = await listShareGrants();
-      setShareGrants(grants);
-    } catch (err) {
-      dialog.error('Lỗi tạo mã', err.message);
-    }
-  };
-
-  const handleRedeemCode = async () => {
-    if (!shareCodeInput.trim()) return;
-    try {
-      bridge.haptic('light');
-      await redeemShareCode({ code: shareCodeInput.trim().toUpperCase() });
-      setShareCodeInput('');
-      await dialog.success('Kết nối thành công!', 'Đã mở rộng phạm vi kết nối với workspace chia sẻ.');
-      const grants = await listShareGrants();
-      setShareGrants(grants);
-      data.loadData();
-    } catch (err) {
-      dialog.error('Lỗi redeem', err.message);
-    }
-  };
-
-  const handleRevokeGrant = async (grantId) => {
-    const ok = await dialog.confirm('Hủy kết nối chia sẻ này?', 'Hai bên sẽ không còn nhìn thấy thông tin của nhau nữa.', {
-      danger: true,
-      confirmLabel: 'Hủy kết nối',
-      cancelLabel: 'Bỏ qua',
-    });
-    if (!ok) return;
-
-    try {
-      bridge.haptic('medium');
-      await revokeShareGrant(grantId);
-      const grants = await listShareGrants();
-      setShareGrants(grants);
-      data.loadData();
-    } catch (err) {
-      dialog.error('Lỗi hủy chia sẻ', err.message);
-    }
-  };
-
 
   // ─── Icebreaker (template-based, no AI) ──────────────────────────────────
 
@@ -1135,7 +1051,7 @@ export default function App() {
     if (!ok) return;
 
     try {
-      const activeWs = scope?.workspaceId || ctx?.workspaceId;
+      const activeWs = ctx?.workspaceId;
 
       await db.from('user_profiles').delete().eq('workspace_id', activeWs).eq('user_id', ctx.userId);
       await db.from('user_tags').delete().eq('workspace_id', activeWs).eq('user_id', ctx.userId);
@@ -1329,7 +1245,6 @@ export default function App() {
             <p className="brand-tagline">Tự tạo phòng hẹn nhanh đi chill & thể thao</p>
           </div>
         </div>
-        <ScopeSwitcher onManageGrants={() => setShowShareManageModal(true)} />
       </header>
 
       {/* Tabs */}
@@ -1358,7 +1273,6 @@ export default function App() {
               myTags={data.myTags}
               searchQuery={searchQuery}
               fallbackEnabled={fallbackEnabled}
-              scope={scope}
               rankedCandidates={rankedCandidates}
               newbiePrimaryBuddy={newbiePrimaryBuddy}
               hasConnectedPrimaryBuddy={hasConnectedPrimaryBuddy}
@@ -1406,7 +1320,6 @@ export default function App() {
               onConfirmMeeting={handleConfirmMeeting}
               onOpenChat={setActiveChatConnection}
               onOpenInvite={() => openInviteFor()}
-              onOpenSharing={handleOpenSharing}
               onCreateCommunityClick={() => setShowCreateCommunityModal(true)}
               onDeleteConnectionRequest={handleDeleteConnectionRequest}
             />
@@ -1585,26 +1498,6 @@ export default function App() {
         setExpandedParents={setExpandedParents}
         onSave={handleSaveProfile}
       />
-    )}
-
-    {showSharingModal && (
-      <SharingModal
-        open={showSharingModal}
-        onClose={() => setShowSharingModal(false)}
-        isAnyAdmin={isAnyAdmin}
-        shareCodeInput={shareCodeInput}
-        setShareCodeInput={setShareCodeInput}
-        generatedCode={generatedCode}
-        onGenerateCode={handleGenerateCode}
-        onRedeemCode={handleRedeemCode}
-        shareGrants={shareGrants}
-        onRevokeGrant={handleRevokeGrant}
-        loadingGrants={loadingGrants}
-      />
-    )}
-
-    {showShareManageModal && (
-      <ShareManageModal open={showShareManageModal} onClose={() => setShowShareManageModal(false)} />
     )}
 
     {activeChatConnection && (

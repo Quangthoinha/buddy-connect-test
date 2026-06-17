@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { getContext } from '../lib/context.js';
 import { db } from '../lib/supabase.js';
 import { listMembers, getProfiles } from '../lib/members.js';
-import { useActiveScope } from '../lib/sharing.js';
 import { subscribeToTable } from '../lib/realtime.js';
 
 const EMPTY_PROFILE = {
@@ -19,7 +18,6 @@ const EMPTY_PROFILE = {
 
 export function useBuddyData() {
   const ctx = getContext();
-  const scope = useActiveScope();
 
   const [loading, setLoading] = useState(true);
   const [hasProfile, setHasProfile] = useState(false);
@@ -40,7 +38,7 @@ export function useBuddyData() {
   const [rooms, setRooms] = useState([]);
   const [invitations, setInvitations] = useState([]);
 
-  const activeWs = scope?.workspaceId;
+  const activeWs = ctx?.workspaceId;
 
   async function loadConnectionData() {
     if (!activeWs) return { requests: [], meetings: [], rms: [], invs: [] };
@@ -238,7 +236,7 @@ export function useBuddyData() {
     }
   }
 
-  // Initial load + scope change
+  // Initial load + workspace change
   useEffect(() => {
     if (activeWs) {
       loadData();
